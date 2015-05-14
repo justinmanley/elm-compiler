@@ -77,6 +77,7 @@ Library
         Generate.JavaScript.Variable,
         Generate.Substitute,
         Nitpick.TopLevelTypes,
+        Optimize.CallGraph,
         Parse.Binop,
         Parse.Declaration,
         Parse.Expression,
@@ -134,7 +135,8 @@ Library
         text >= 1 && < 2,
         transformers >= 0.2 && < 0.5,
         union-find >= 0.2 && < 0.3,
-        unordered-containers >= 0.1 && < 0.3
+        unordered-containers >= 0.1 && < 0.3,
+        fgl >= 5.5.1.0
 
 
 Executable elm
