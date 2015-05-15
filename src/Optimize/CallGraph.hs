@@ -1,9 +1,8 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Optimize.CallGraph where
 
-import Data.Graph.Inductive.Graph (
-    DynGraph, Node, LEdge, 
-    insEdge, insEdges, 
-    lsuc)
+import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge)
 import qualified Data.Graph.Inductive.Graph as Graph
 import Control.Monad.State
 import qualified Data.Map.Strict as Map 
@@ -24,9 +23,10 @@ import qualified Optimize.Environment as Env
 data Dependency
     = Body
     | Tail
+    deriving (Show, Eq)
 
 type VarEnv = Env.Environment Var.Canonical
-type DependencyGraph graph a = graph a (Maybe Dependency)
+type DependencyGraph graph a = graph a Dependency
 
 tailCallGraph :: DynGraph graph 
     => CanonicalModule 
@@ -50,7 +50,7 @@ checkDef boundVariables (Canonical.Definition annotatedPat expr _) tailCalls = c
 
         _ -> return tailCalls
 
-checkExpr :: DynGraph graph 
+checkExpr :: forall graph a . DynGraph graph 
     => Env.UniqueVar
     -> [Var.Canonical]
     -> Canonical.Expr 
@@ -66,7 +66,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         else do
             (env, var') <- Env.variable <$> get <*> return canonicalVar
             put env
-            return $ insEdge (var, var', Just Tail) tailCalls
+            return $ Graph.insEdge (var, var', Tail) tailCalls
     
     E.Range lowExpr highExpr             -> 
         return tailCalls 
@@ -75,7 +75,6 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         return tailCalls 
 
     E.Binop var leftArgExpr rightArgExpr -> 
-        
         undefined 
 
     E.Lambda pat expr'                   -> 
@@ -98,8 +97,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         --es :: [LEdge (Maybe Dependency)]
         --es = zip3 (replicate (length tcs) $ idOf var) (map idOf tcs) (replicate (length tcs) $ Just Tail) 
     E.MultiIf ifExprs                    -> 
-        undefined
-        -- ifExprs :: [(Canonical.Expr, Canonical.Expr)]
+        foldrM (checkIfExpr var boundVariables) tailCalls ifExprs
 
     E.Let defs expr'                     ->
         checkExpr var boundVariables expr' =<< (foldrM (checkDef boundVariables) tailCalls defs)
@@ -130,6 +128,29 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
 
     E.GLShader _ _ _                     -> 
         return tailCalls
+
+checkIfExpr :: forall graph a . DynGraph graph
+    => Env.UniqueVar
+    -> [Var.Canonical] 
+    -> (Canonical.Expr, Canonical.Expr)
+    -> DependencyGraph graph a 
+    -> State VarEnv (DependencyGraph graph a)
+checkIfExpr var boundVariables (ifExpr, thenExpr) tailCalls = do
+        ifCalls :: DependencyGraph graph a <- 
+            checkExpr var boundVariables ifExpr Graph.empty
+
+        thenCalls :: DependencyGraph graph a <-
+            checkExpr var boundVariables thenExpr Graph.empty
+
+        let ifCalledVars = Graph.lsuc ifCalls var
+            thenCalledVars = Graph.lsuc thenCalls var
+
+            addDependency (varId, dep) callGraph = return $ 
+                if (varId, dep) `elem` ifCalledVars 
+                then Graph.insEdge (var, varId, Body) callGraph 
+                else Graph.insEdge (var, varId, dep) callGraph
+
+        foldrM addDependency tailCalls (ifCalledVars ++ thenCalledVars)
 
 -- When a pattern is encountered at the top level.
 -- The only difference is the way that variable patterns are treated!
