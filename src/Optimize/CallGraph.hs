@@ -70,12 +70,26 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     
     E.Range lowExpr highExpr             -> 
         return tailCalls 
+        -- This isn't quite accurate - this will ignore functions that are called from these expressions.
 
     E.ExplicitList exprs                 -> 
         return tailCalls 
+        -- This isn't quite accurate - this will ignore functions that are called from these expressions.
 
-    E.Binop var leftArgExpr rightArgExpr -> 
-        undefined 
+    E.Binop binOpVar leftArgExpr rightArgExpr -> do
+        leftCalls :: DependencyGraph graph a <- 
+            checkExpr var boundVariables leftArgExpr Graph.empty
+        
+        rightCalls :: DependencyGraph graph a <- 
+            checkExpr var boundVariables rightArgExpr Graph.empty
+
+        (env, binOp) <- Env.variable <$> get <*> return binOpVar
+        put env
+
+        let calls = (Graph.lsuc leftCalls var) ++ (Graph.lsuc rightCalls var)
+            calledInBody (varId, dep) = (var, varId, Body)
+
+        return $ Graph.insEdges ((var, binOp, Tail) : map calledInBody calls) tailCalls
 
     E.Lambda pat expr'                   -> 
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
@@ -152,6 +166,7 @@ checkIfExpr var boundVariables (ifExpr, thenExpr) tailCalls = do
 
         foldrM addDependency tailCalls (ifCalledVars ++ thenCalledVars)
 
+-- Is it really necessary to have two bindPat functions? Is this handled by checkDef?
 -- When a pattern is encountered at the top level.
 -- The only difference is the way that variable patterns are treated!
 bindPat :: CanonicalPattern -> [Var.Canonical] -> [Var.Canonical]
