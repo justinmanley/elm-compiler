@@ -193,15 +193,19 @@ bindPat (A _ pat) boundVariables = case pat of
 
 -- | Perform a biased merge of the labeled edge (var1, var2, dep) into callGraph
 --   so that the Body label will never be replaced by the Tail label.
-mergeEdge :: DynGraph graph 
-    => (Env.UniqueVar, Env.UniqueVar, Dependency)
-    -> DependencyGraph graph
-    -> DependencyGraph graph
-mergeEdge (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
+bodyReplacesTail :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
+bodyReplacesTail (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
     Nothing   -> Graph.insEdge (var1, var2, dep) callGraph
     Just (_, _, previousDep) -> case previousDep of
         Tail -> Graph.insEdge (var1, var2, dep) callGraph
         Body -> callGraph
+
+-- | If the target edge appears in the graph, then change its label to Body.
+--   Otherwise, leave the dependency label unchanged.
+doesNotOccur :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
+doesNotOccur (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
+    Nothing -> callGraph
+    Just _  -> Graph.insEdge (var1, var2, Body) callGraph 
 
 -- | If the graph contains an edge from src to dest, return that edge inside a Just.
 --   Otherwise, return Nothing. 
@@ -211,9 +215,10 @@ edge (src, dest) gr = case filter (\(_, n2, _) -> n2 == dest) $ Graph.out gr src
     []        -> Nothing
     labEdge:_ -> Just labEdge
 
--- | Performs a biased merge of gMinor into gMajor.
-merge :: DynGraph graph 
-    => DependencyGraph graph 
+mergeWith :: DynGraph graph
+    => (LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph)
+    -> DependencyGraph graph 
     -> DependencyGraph graph 
     -> DependencyGraph graph
-merge gMajor gMinor = foldr mergeEdge gMajor $ Graph.labEdges gMinor
+mergeWith mergeEdge gMajor gMinor = 
+    foldr mergeEdge gMajor $ Graph.labEdges gMinor
