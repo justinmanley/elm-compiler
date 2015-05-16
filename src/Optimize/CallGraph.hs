@@ -166,19 +166,8 @@ checkIfExpr var boundVariables (ifExpr, thenExpr) tailCalls = do
 
         foldrM addDependency tailCalls (ifCalledVars ++ thenCalledVars)
 
--- Is it really necessary to have two bindPat functions? Is this handled by checkDef?
--- When a pattern is encountered at the top level.
--- The only difference is the way that variable patterns are treated!
 bindPat :: CanonicalPattern -> [Var.Canonical] -> [Var.Canonical]
-bindPat pat@(A _ pat') boundVariables = case pat' of
-    Pattern.Var str -> boundVariables
-    _ -> bindPat' pat boundVariables
-
--- If a variable pattern is not at the top level, we treat it like any other pattern,
--- and add the variable to the list of bound variables.
--- Is this necessary?
-bindPat' :: CanonicalPattern -> [Var.Canonical] -> [Var.Canonical]
-bindPat' (A _ pat) boundVariables = case pat of
+bindPat (A _ pat) boundVariables = case pat of
     Pattern.Data _ pats -> foldr bindPat boundVariables pats 
     Pattern.Record fieldNames -> (map Var.local fieldNames) ++ boundVariables
     Pattern.Alias str pat' -> bindPat pat' (Var.local str : boundVariables)
