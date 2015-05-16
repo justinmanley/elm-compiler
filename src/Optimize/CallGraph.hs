@@ -2,7 +2,7 @@
 
 module Optimize.CallGraph where
 
-import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge)
+import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
 import qualified Data.Graph.Inductive.Graph as Graph
 import Control.Monad.State
 import qualified Data.Map.Strict as Map 
@@ -222,3 +222,15 @@ mergeWith :: DynGraph graph
     -> DependencyGraph graph
 mergeWith mergeEdge gMajor gMinor = 
     foldr mergeEdge gMajor $ Graph.labEdges gMinor
+
+updateEdge :: DynGraph graph => LEdge b -> graph () b -> graph () b
+updateEdge (n1, n2, label) g = let
+        addNodeIfMissing node graph = 
+            if not $ node `gelem` graph 
+            then Graph.insNode (node, ()) graph 
+            else graph
+
+        g' = (addNodeIfMissing n2 . addNodeIfMissing n1) g
+    in case edge (n1, n2) g' of
+        Nothing -> Graph.insEdge (n1, n2, label) g'
+        Just _  -> Graph.insEdge (n1, n2, label) $ Graph.delEdge (1,2) g'
