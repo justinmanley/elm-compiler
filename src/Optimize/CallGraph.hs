@@ -66,7 +66,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         else do
             (env, var') <- Env.variable <$> get <*> return canonicalVar
             put env
-            return $ Graph.insEdge (var, var', Tail) tailCalls
+            return $ updateEdge (var, var', Tail) tailCalls
     
     E.Range lowExpr highExpr             -> 
         return tailCalls 
@@ -91,30 +91,22 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         let calls = (Graph.lsuc leftCalls var) ++ (Graph.lsuc rightCalls var)
             calledInBody (varId, dep) = (var, varId, Body)
 
-        return $ Graph.insEdges ((var, binOp, Tail) : map calledInBody calls) tailCalls
+        return $ foldr updateEdge tailCalls ((var, binOp, Tail) : map calledInBody calls)
 
     E.Lambda pat expr'                   -> 
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
 
     E.App appExpr argExpr                -> do
-        appCalls :: DependencyGraph graph <-
-            checkExpr var boundVariables appExpr Graph.empty
+        appCalls <- checkExpr var boundVariables appExpr tailCalls
+        argCalls <- checkExpr var boundVariables argExpr tailCalls
 
-        argCalls :: DependencyGraph graph <-
-            checkExpr var boundVariables argExpr Graph.empty
+        return $ (mergeWith doesNotOccur) appCalls argCalls
 
-        let calledInApp = Graph.lsuc appCalls var
-            calledInArg = Graph.lsuc argCalls var
+    E.MultiIf ifExprs                    -> do
+        multiIfCalls :: [DependencyGraph graph] <- 
+            mapM (checkIfExpr var boundVariables Graph.empty) ifExprs
 
-            addDependency (var', dep) callGraph = return $
-                if (var', dep) `elem` calledInApp 
-                then Graph.insEdge (var, var', Body) callGraph
-                else Graph.insEdge (var, var', dep) callGraph
-
-        foldrM addDependency tailCalls (calledInApp ++ calledInArg)
-
-    E.MultiIf ifExprs                    -> 
-        foldrM (checkIfExpr var boundVariables) tailCalls ifExprs
+        return $ foldr (mergeWith bodyReplacesTail) tailCalls multiIfCalls
 
     E.Let defs expr'                     ->
         checkExpr var boundVariables expr' =<< (foldrM (checkDef boundVariables) tailCalls defs)
@@ -163,25 +155,17 @@ checkCaseExpr var boundVariables (pat, expr) tailCalls =
 checkIfExpr :: forall graph . DynGraph graph
     => Env.UniqueVar
     -> [Var.Canonical] 
-    -> (Canonical.Expr, Canonical.Expr)
     -> DependencyGraph graph 
+    -> (Canonical.Expr, Canonical.Expr)
     -> State VarEnv (DependencyGraph graph)
-checkIfExpr var boundVariables (ifExpr, thenExpr) tailCalls = do
-        ifCalls :: DependencyGraph graph <- 
-            checkExpr var boundVariables ifExpr Graph.empty
+checkIfExpr var boundVariables tailCalls (ifExpr, thenExpr) = do
+    ifCalls :: DependencyGraph graph <- 
+        checkExpr var boundVariables ifExpr tailCalls
 
-        thenCalls :: DependencyGraph graph <-
-            checkExpr var boundVariables thenExpr Graph.empty
+    thenCalls :: DependencyGraph graph <-
+        checkExpr var boundVariables thenExpr tailCalls
 
-        let ifCalledVars = Graph.lsuc ifCalls var
-            thenCalledVars = Graph.lsuc thenCalls var
-
-            addDependency (varId, dep) callGraph = return $ 
-                if (varId, dep) `elem` ifCalledVars 
-                then Graph.insEdge (var, varId, Body) callGraph 
-                else Graph.insEdge (var, varId, dep) callGraph
-
-        foldrM addDependency tailCalls (ifCalledVars ++ thenCalledVars)
+    return $ (mergeWith doesNotOccur) ifCalls thenCalls
 
 bindPat :: CanonicalPattern -> [Var.Canonical] -> [Var.Canonical]
 bindPat (A _ pat) boundVariables = case pat of
@@ -195,9 +179,9 @@ bindPat (A _ pat) boundVariables = case pat of
 --   so that the Body label will never be replaced by the Tail label.
 bodyReplacesTail :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
 bodyReplacesTail (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
-    Nothing   -> Graph.insEdge (var1, var2, dep) callGraph
+    Nothing   -> updateEdge (var1, var2, dep) callGraph
     Just (_, _, previousDep) -> case previousDep of
-        Tail -> Graph.insEdge (var1, var2, dep) callGraph
+        Tail -> updateEdge (var1, var2, dep) callGraph
         Body -> callGraph
 
 -- | If the target edge appears in the graph, then change its label to Body.
@@ -205,7 +189,7 @@ bodyReplacesTail (var1, var2, dep) callGraph = case edge (var1, var2) callGraph 
 doesNotOccur :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
 doesNotOccur (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
     Nothing -> callGraph
-    Just _  -> Graph.insEdge (var1, var2, Body) callGraph 
+    Just _  -> updateEdge (var1, var2, Body) callGraph 
 
 -- | If the graph contains an edge from src to dest, return that edge inside a Just.
 --   Otherwise, return Nothing. 
