@@ -94,22 +94,23 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.Lambda pat expr'                   -> 
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
 
-    E.App appExpr argExpr                -> undefined --insEdges es tailCalls
-        ---- Look at each of the terms that appears tail recursively in argCalls.
-        ---- Insert an edge (var, term, Just Tail) only if term does not appear in appCalls.
-        -- I want to have a convenient way of checking that a variable does not occur in a term.
-        --where
-        --appCalls = freeVarsIn appExpr
-        --argCalls = checkExpr var argExpr tailCalls
+    E.App appExpr argExpr                -> do
+        appCalls :: DependencyGraph graph a <-
+            checkExpr var boundVariables appExpr Graph.empty
 
-        --argTailCalls :: [(Node, Maybe Dependency)]
-        --argTailCalls = lsuc argCalls var
+        argCalls :: DependencyGraph graph a <-
+            checkExpr var boundVariables argExpr Graph.empty
 
-        --tcs :: [Node]
-        --tcs = filter (not containedIn appCalls) $ argTailCalls
+        let calledInApp = Graph.lsuc appCalls var
+            calledInArg = Graph.lsuc argCalls var
 
-        --es :: [LEdge (Maybe Dependency)]
-        --es = zip3 (replicate (length tcs) $ idOf var) (map idOf tcs) (replicate (length tcs) $ Just Tail) 
+            addDependency (var', dep) callGraph = return $
+                if (var', dep) `elem` calledInApp 
+                then Graph.insEdge (var, var', Body) callGraph
+                else Graph.insEdge (var, var', dep) callGraph
+
+        foldrM addDependency tailCalls (calledInApp ++ calledInArg)
+
     E.MultiIf ifExprs                    -> 
         foldrM (checkIfExpr var boundVariables) tailCalls ifExprs
 
