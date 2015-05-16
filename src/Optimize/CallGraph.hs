@@ -124,6 +124,8 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
             checkExpr var boundVariables targetExpr tailCalls
 
         foldrM (checkCaseExpr var boundVariables) Graph.empty cases
+
+        -- I want to go through each edge and update each edge according to 
     
     E.Data str exprs                     -> 
         undefined
@@ -157,20 +159,7 @@ checkCaseExpr :: forall graph . DynGraph graph
     -> State VarEnv (DependencyGraph graph)
 checkCaseExpr var boundVariables (pat, expr) tailCalls = 
     checkExpr var (bindPat pat boundVariables) expr tailCalls
-
-updateEdge :: DynGraph graph 
-    => (Env.UniqueVar, Env.UniqueVar, Dependency)
-    -> DependencyGraph graph
-    -> DependencyGraph graph
-updateEdge (var1, var2, dep) callGraph = let
-        edges = filter (\(v2', _) -> v2' == var2) $ Graph.lsuc callGraph var1
-        updateDependencyStatus (v1, v2, dep') gr = case dep' of
-            Tail -> Graph.insEdge (v1, v2, dep) gr
-            Body -> gr
-    in case zipWith (\a (b,c) -> (a,b,c)) (replicate (length edges) var1) edges of 
-        []    -> Graph.insEdge (var1, var2, dep) callGraph
-        es -> foldr updateDependencyStatus callGraph es
-
+    
 checkIfExpr :: forall graph . DynGraph graph
     => Env.UniqueVar
     -> [Var.Canonical] 
@@ -201,3 +190,30 @@ bindPat (A _ pat) boundVariables = case pat of
     Pattern.Alias str pat' -> bindPat pat' (Var.local str : boundVariables)
     Pattern.Var str -> Var.local str : boundVariables
     _ -> boundVariables
+
+-- | Perform a biased merge of the labeled edge (var1, var2, dep) into callGraph
+--   so that the Body label will never be replaced by the Tail label.
+mergeEdge :: DynGraph graph 
+    => (Env.UniqueVar, Env.UniqueVar, Dependency)
+    -> DependencyGraph graph
+    -> DependencyGraph graph
+mergeEdge (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
+    Nothing   -> Graph.insEdge (var1, var2, dep) callGraph
+    Just (_, _, previousDep) -> case previousDep of
+        Tail -> Graph.insEdge (var1, var2, dep) callGraph
+        Body -> callGraph
+
+-- | If the graph contains an edge from src to dest, return that edge inside a Just.
+--   Otherwise, return Nothing. 
+--   Assumes that there can only be one edge in each direction between any pair of edges.
+edge :: DynGraph graph => (Node, Node) -> graph a b -> Maybe (LEdge b)
+edge (src, dest) gr = case filter (\(_, n2, _) -> n2 == dest) $ Graph.out gr src of
+    []        -> Nothing
+    labEdge:_ -> Just labEdge
+
+-- | Performs a biased merge of gMinor into gMajor.
+merge :: DynGraph graph 
+    => DependencyGraph graph 
+    -> DependencyGraph graph 
+    -> DependencyGraph graph
+merge gMajor gMinor = foldr mergeEdge gMajor $ Graph.labEdges gMinor
