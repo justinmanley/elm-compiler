@@ -26,11 +26,11 @@ data Dependency
     deriving (Show, Eq)
 
 type VarEnv = Env.Environment Var.Canonical
-type DependencyGraph graph a = graph a Dependency
+type DependencyGraph graph = graph () Dependency
 
 tailCallGraph :: DynGraph graph 
     => CanonicalModule 
-    -> State VarEnv (DependencyGraph graph a)
+    -> State VarEnv (DependencyGraph graph)
 tailCallGraph modul = case Module.program $ Module.body modul of
     A _ expr -> case expr of
         (E.Let defs expr) -> foldrM (checkDef []) Graph.empty defs
@@ -39,8 +39,8 @@ tailCallGraph modul = case Module.program $ Module.body modul of
 checkDef :: DynGraph graph 
     => [Var.Canonical]
     -> Canonical.Def
-    -> DependencyGraph graph a 
-    -> State VarEnv (DependencyGraph graph a)
+    -> DependencyGraph graph 
+    -> State VarEnv (DependencyGraph graph)
 checkDef boundVariables (Canonical.Definition annotatedPat expr _) tailCalls = case annotatedPat of
     A _ pat -> case pat of
         Pattern.Var str        -> do
@@ -50,12 +50,12 @@ checkDef boundVariables (Canonical.Definition annotatedPat expr _) tailCalls = c
 
         _ -> return tailCalls
 
-checkExpr :: forall graph a . DynGraph graph 
+checkExpr :: forall graph . DynGraph graph 
     => Env.UniqueVar
     -> [Var.Canonical]
     -> Canonical.Expr 
-    -> DependencyGraph graph a 
-    -> State VarEnv (DependencyGraph graph a)
+    -> DependencyGraph graph 
+    -> State VarEnv (DependencyGraph graph)
 checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.Literal lit                        -> 
         return tailCalls 
@@ -71,16 +71,18 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.Range lowExpr highExpr             -> 
         return tailCalls 
         -- This isn't quite accurate - this will ignore functions that are called from these expressions.
+        -- Certainly there can't be any tail calls in this kind of expression. But I do want to record which
+        -- terms appear in these expressions.
 
     E.ExplicitList exprs                 -> 
         return tailCalls 
         -- This isn't quite accurate - this will ignore functions that are called from these expressions.
 
     E.Binop binOpVar leftArgExpr rightArgExpr -> do
-        leftCalls :: DependencyGraph graph a <- 
+        leftCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables leftArgExpr Graph.empty
         
-        rightCalls :: DependencyGraph graph a <- 
+        rightCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables rightArgExpr Graph.empty
 
         (env, binOp) <- Env.variable <$> get <*> return binOpVar
@@ -95,10 +97,10 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
 
     E.App appExpr argExpr                -> do
-        appCalls :: DependencyGraph graph a <-
+        appCalls :: DependencyGraph graph <-
             checkExpr var boundVariables appExpr Graph.empty
 
-        argCalls :: DependencyGraph graph a <-
+        argCalls :: DependencyGraph graph <-
             checkExpr var boundVariables argExpr Graph.empty
 
         let calledInApp = Graph.lsuc appCalls var
@@ -117,8 +119,11 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.Let defs expr'                     ->
         checkExpr var boundVariables expr' =<< (foldrM (checkDef boundVariables) tailCalls defs)
 
-    E.Case expr cases                    -> 
-        undefined 
+    E.Case targetExpr cases              -> do
+        targetExprCalls :: DependencyGraph graph <- 
+            checkExpr var boundVariables targetExpr tailCalls
+
+        foldrM (checkCaseExpr var boundVariables) Graph.empty cases
     
     E.Data str exprs                     -> 
         undefined
@@ -144,17 +149,39 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.GLShader _ _ _                     -> 
         return tailCalls
 
-checkIfExpr :: forall graph a . DynGraph graph
+checkCaseExpr :: forall graph . DynGraph graph
+    => Env.UniqueVar
+    -> [Var.Canonical]
+    -> (CanonicalPattern, Canonical.Expr)
+    -> DependencyGraph graph
+    -> State VarEnv (DependencyGraph graph)
+checkCaseExpr var boundVariables (pat, expr) tailCalls = 
+    checkExpr var (bindPat pat boundVariables) expr tailCalls
+
+updateEdge :: DynGraph graph 
+    => (Env.UniqueVar, Env.UniqueVar, Dependency)
+    -> DependencyGraph graph
+    -> DependencyGraph graph
+updateEdge (var1, var2, dep) callGraph = let
+        edges = filter (\(v2', _) -> v2' == var2) $ Graph.lsuc callGraph var1
+        updateDependencyStatus (v1, v2, dep') gr = case dep' of
+            Tail -> Graph.insEdge (v1, v2, dep) gr
+            Body -> gr
+    in case zipWith (\a (b,c) -> (a,b,c)) (replicate (length edges) var1) edges of 
+        []    -> Graph.insEdge (var1, var2, dep) callGraph
+        es -> foldr updateDependencyStatus callGraph es
+
+checkIfExpr :: forall graph . DynGraph graph
     => Env.UniqueVar
     -> [Var.Canonical] 
     -> (Canonical.Expr, Canonical.Expr)
-    -> DependencyGraph graph a 
-    -> State VarEnv (DependencyGraph graph a)
+    -> DependencyGraph graph 
+    -> State VarEnv (DependencyGraph graph)
 checkIfExpr var boundVariables (ifExpr, thenExpr) tailCalls = do
-        ifCalls :: DependencyGraph graph a <- 
+        ifCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables ifExpr Graph.empty
 
-        thenCalls :: DependencyGraph graph a <-
+        thenCalls :: DependencyGraph graph <-
             checkExpr var boundVariables thenExpr Graph.empty
 
         let ifCalledVars = Graph.lsuc ifCalls var
