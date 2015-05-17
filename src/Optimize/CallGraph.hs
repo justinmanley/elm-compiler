@@ -2,10 +2,9 @@
 
 module Optimize.CallGraph where
 
-import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
 import qualified Data.Graph.Inductive.Graph as Graph
+import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
 import Control.Monad.State
-import qualified Data.Map.Strict as Map
 import Control.Applicative ((<$>), (<*>))
 import Data.Foldable (foldrM)
 
@@ -28,13 +27,13 @@ data Dependency
 type VarEnv = Env.Environment Var.Canonical
 type DependencyGraph graph = graph () Dependency
 
-tailCallGraph :: DynGraph graph 
+callGraph :: DynGraph graph 
     => CanonicalModule 
     -> State VarEnv (DependencyGraph graph)
-tailCallGraph modul = case Module.program $ Module.body modul of
+callGraph modul = case Module.program . Module.body $ modul of
     A _ expr -> case expr of
-        (E.Let defs expr) -> foldrM (checkDef []) Graph.empty defs
-        _ -> undefined -- shouldn't happen
+        (E.Let defs _) -> foldrM (checkDef []) Graph.empty defs
+        _ -> error "[Compiler error]: The top-level expression in a module should be a let-expression after canonicalization."
 
 checkDef :: DynGraph graph 
     => [Var.Canonical]
@@ -57,10 +56,10 @@ checkExpr :: forall graph . DynGraph graph
     -> DependencyGraph graph 
     -> State VarEnv (DependencyGraph graph)
 checkExpr var boundVariables (A _ expr) tailCalls = case expr of
-    E.Literal lit                        -> 
+    E.Literal _                           -> 
         return tailCalls 
     
-    E.Var canonicalVar                   -> 
+    E.Var canonicalVar                    -> 
         if canonicalVar `elem` boundVariables
         then return tailCalls
         else do
@@ -68,22 +67,22 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
             put env
             return $ updateEdge (var, var', Tail) tailCalls
     
-    E.Range lowExpr highExpr             -> do
+    E.Range lowExpr highExpr              -> do
         lowCalls :: DependencyGraph graph <-
             checkExpr var boundVariables lowExpr tailCalls
 
         highCalls :: DependencyGraph graph <-
             checkExpr var boundVariables highExpr tailCalls
 
-        return $ Graph.emap (const Body) (mergeWith bodyReplacesTail lowCalls highCalls)
+        return $ mergeWith body lowCalls highCalls
 
-    E.ExplicitList exprs                 -> do
+    E.ExplicitList exprs                  -> do
         explicitListCalls :: [DependencyGraph graph] <-
-            mapM (\expr' -> checkExpr var boundVariables expr' Graph.empty) exprs
+            mapM (\expr'  -> checkExpr var boundVariables expr' Graph.empty) exprs
 
         return $ foldr (mergeWith bodyReplacesTail) tailCalls explicitListCalls
 
-    E.Binop binOpVar leftArgExpr rightArgExpr -> do
+    E.Binop binOpVar leftArgExpr rightArgExpr  -> do
         leftCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables leftArgExpr Graph.empty
         
@@ -93,32 +92,27 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         (env, binOp) <- Env.variable <$> get <*> return binOpVar
         put env
 
-        let calls = (Graph.lsuc leftCalls var) ++ (Graph.lsuc rightCalls var)
-            calledInBody (varId, dep) = (var, varId, Body)
+        return $ (updateEdge (var, binOp, Tail) $ (mergeWith body) leftCalls rightCalls)
 
-        let binOpCalls = updateEdge (var, binOp, Tail) $ (mergeWith bodyReplacesTail) leftCalls rightCalls
-
-        return $ Graph.emap (const Body) binOpCalls
-
-    E.Lambda pat expr'                   -> 
+    E.Lambda pat expr'                    -> 
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
 
-    E.App appExpr argExpr                -> do
+    E.App appExpr argExpr                 -> do
         appCalls <- checkExpr var boundVariables appExpr tailCalls
         argCalls <- checkExpr var boundVariables argExpr tailCalls
 
         return $ (mergeWith doesNotOccur) appCalls argCalls
 
-    E.MultiIf ifExprs                    -> do
+    E.MultiIf ifExprs                     -> do
         multiIfCalls :: [DependencyGraph graph] <- 
             mapM (checkIfExpr var boundVariables Graph.empty) ifExprs
 
         return $ foldr (mergeWith bodyReplacesTail) tailCalls multiIfCalls
 
-    E.Let defs expr'                     ->
+    E.Let defs expr'                      ->
         checkExpr var boundVariables expr' =<< (foldrM (checkDef boundVariables) tailCalls defs)
 
-    E.Case targetExpr cases              -> do
+    E.Case targetExpr cases               -> do
         targetExprCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables targetExpr Graph.empty
 
@@ -127,29 +121,45 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
 
         return $ (mergeWith doesNotOccur) targetExprCalls (foldr (mergeWith bodyReplacesTail) tailCalls caseCalls)
     
-    E.Data str exprs                     -> 
-        undefined
-        -- Is it possible for this to be tail-recursive?
+    E.Data _ exprs                        -> do
+        argExprs :: [DependencyGraph graph] <-
+            mapM (\expr' -> checkExpr var boundVariables expr' Graph.empty) exprs
 
-    E.Access _ _                         -> 
+        -- Should we do anything with the string representing the data constructor?
+        return $ foldr (mergeWith body) tailCalls argExprs
+
+    E.Access recordExpr _                 -> 
+        Graph.emap (const Body) <$> (checkExpr var boundVariables recordExpr tailCalls)
+
+    E.Remove recordExpr _                 -> 
+        Graph.emap (const Body) <$> (checkExpr var boundVariables recordExpr tailCalls)
+
+    E.Insert recordExpr _ insertExpr      -> do
+        recordCalls :: DependencyGraph graph <-
+            checkExpr var boundVariables recordExpr tailCalls
+
+        insertCalls :: DependencyGraph graph <-
+            checkExpr var boundVariables insertExpr Graph.empty
+
+        return $ foldr (mergeWith body) tailCalls [recordCalls, insertCalls] 
+
+    E.Modify recordExpr modifications           -> do
+        recordCalls :: DependencyGraph graph <-
+            checkExpr var boundVariables recordExpr Graph.empty
+
+        modifyCalls :: [DependencyGraph graph] <-
+            mapM (\(_, expr') -> checkExpr var boundVariables expr' Graph.empty) modifications
+
+        return $ foldr (mergeWith body) tailCalls (recordCalls : modifyCalls)
+
+    E.Record record                       -> 
+        foldr (mergeWith body) tailCalls <$> 
+            mapM (\(_, expr') -> checkExpr var boundVariables expr' Graph.empty) record
+
+    E.Port _                              -> 
         return tailCalls
 
-    E.Remove _ _                         -> 
-        return tailCalls
-
-    E.Insert _ _ _                       -> 
-        return tailCalls
-
-    E.Modify _ _                         -> 
-        return tailCalls
-
-    E.Record _                           -> 
-        return tailCalls
-
-    E.Port _                             -> 
-        return tailCalls
-
-    E.GLShader _ _ _                     -> 
+    E.GLShader _ _ _                      -> 
         return tailCalls
 
 checkCaseExpr :: forall graph . DynGraph graph
@@ -184,6 +194,9 @@ bindPat (A _ pat) boundVariables = case pat of
     Pattern.Var str -> Var.local str : boundVariables
     _ -> boundVariables
 
+body :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
+body (var1, var2, _) callGraph = updateEdge (var1, var2, Body) callGraph
+
 -- | Perform a biased merge of the labeled edge (var1, var2, dep) into callGraph
 --   so that the Body label will never be replaced by the Tail label.
 bodyReplacesTail :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
@@ -196,7 +209,7 @@ bodyReplacesTail (var1, var2, dep) callGraph = case edge (var1, var2) callGraph 
 -- | If the target edge appears in the graph, then change its label to Body.
 --   Otherwise, leave the dependency label unchanged.
 doesNotOccur :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
-doesNotOccur (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
+doesNotOccur (var1, var2, _) callGraph = case edge (var1, var2) callGraph of
     Nothing -> callGraph
     Just _  -> updateEdge (var1, var2, Body) callGraph 
 
