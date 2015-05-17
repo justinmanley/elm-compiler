@@ -96,7 +96,9 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         let calls = (Graph.lsuc leftCalls var) ++ (Graph.lsuc rightCalls var)
             calledInBody (varId, dep) = (var, varId, Body)
 
-        return $ foldr updateEdge tailCalls ((var, binOp, Tail) : map calledInBody calls)
+        let binOpCalls = updateEdge (var, binOp, Tail) $ (mergeWith bodyReplacesTail) leftCalls rightCalls
+
+        return $ Graph.emap (const Body) binOpCalls
 
     E.Lambda pat expr'                   -> 
         checkExpr var (bindPat pat boundVariables) expr' tailCalls
@@ -127,7 +129,8 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     
     E.Data str exprs                     -> 
         undefined
-    
+        -- Is it possible for this to be tail-recursive?
+
     E.Access _ _                         -> 
         return tailCalls
 
