@@ -5,7 +5,7 @@ module Optimize.CallGraph where
 import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
 import qualified Data.Graph.Inductive.Graph as Graph
 import Control.Monad.State
-import qualified Data.Map.Strict as Map 
+import qualified Data.Map.Strict as Map
 import Control.Applicative ((<$>), (<*>))
 import Data.Foldable (foldrM)
 
@@ -68,15 +68,20 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
             put env
             return $ updateEdge (var, var', Tail) tailCalls
     
-    E.Range lowExpr highExpr             -> 
-        return tailCalls 
-        -- This isn't quite accurate - this will ignore functions that are called from these expressions.
-        -- Certainly there can't be any tail calls in this kind of expression. But I do want to record which
-        -- terms appear in these expressions.
+    E.Range lowExpr highExpr             -> do
+        lowCalls :: DependencyGraph graph <-
+            checkExpr var boundVariables lowExpr tailCalls
 
-    E.ExplicitList exprs                 -> 
-        return tailCalls 
-        -- This isn't quite accurate - this will ignore functions that are called from these expressions.
+        highCalls :: DependencyGraph graph <-
+            checkExpr var boundVariables highExpr tailCalls
+
+        return $ Graph.emap (const Body) (mergeWith bodyReplacesTail lowCalls highCalls)
+
+    E.ExplicitList exprs                 -> do
+        explicitListCalls :: [DependencyGraph graph] <-
+            mapM (\expr' -> checkExpr var boundVariables expr' Graph.empty) exprs
+
+        return $ foldr (mergeWith bodyReplacesTail) tailCalls explicitListCalls
 
     E.Binop binOpVar leftArgExpr rightArgExpr -> do
         leftCalls :: DependencyGraph graph <- 
@@ -113,11 +118,12 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
 
     E.Case targetExpr cases              -> do
         targetExprCalls :: DependencyGraph graph <- 
-            checkExpr var boundVariables targetExpr tailCalls
+            checkExpr var boundVariables targetExpr Graph.empty
 
-        foldrM (checkCaseExpr var boundVariables) Graph.empty cases
+        caseCalls :: [DependencyGraph graph] <- 
+            mapM (checkCaseExpr var boundVariables Graph.empty) cases
 
-        -- I want to go through each edge and update each edge according to 
+        return $ (mergeWith doesNotOccur) targetExprCalls (foldr (mergeWith bodyReplacesTail) tailCalls caseCalls)
     
     E.Data str exprs                     -> 
         undefined
@@ -146,10 +152,10 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
 checkCaseExpr :: forall graph . DynGraph graph
     => Env.UniqueVar
     -> [Var.Canonical]
-    -> (CanonicalPattern, Canonical.Expr)
     -> DependencyGraph graph
+    -> (CanonicalPattern, Canonical.Expr)
     -> State VarEnv (DependencyGraph graph)
-checkCaseExpr var boundVariables (pat, expr) tailCalls = 
+checkCaseExpr var boundVariables tailCalls (pat, expr) = 
     checkExpr var (bindPat pat boundVariables) expr tailCalls
     
 checkIfExpr :: forall graph . DynGraph graph
