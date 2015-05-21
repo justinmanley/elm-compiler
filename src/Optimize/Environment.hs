@@ -11,6 +11,7 @@ data Environment a = Environment
     { inScope :: Map a [UniqueVar]
     , varMap :: Map UniqueVar a
     , maxIndex :: UniqueVar }
+    deriving Show
 
 fresh :: Ord a => Environment a -> a -> (Environment a, UniqueVar)
 fresh (Environment { inScope, varMap, maxIndex }) var = 
