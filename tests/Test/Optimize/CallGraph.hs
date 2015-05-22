@@ -31,13 +31,21 @@ callGraphTests :: [Test]
 callGraphTests = 
     [ buildTest $ testModule "Tree.elm" treeTest 
     , buildTest $ testModule ("Soundness" </> "Id.elm") idTest 
-    , testProperty "mergeWith right identity" mergeWithRightIdentity ]
+    , testProperty "mergeWith identity" mergeWithIdentity
+    , testProperty "mergeWith body" mergeWithBody ]
 
 mergeWithIdentity :: DependencyGr -> DependencyGr -> Bool
 mergeWithIdentity (SimpleGraph g1) (SimpleGraph g2) = Graph.equal merged g1 where
-	merged = g1 `ignore` g2
-	ignore = mergeWith $ \edge -> id
-	
+    merged = g1 `ignore` g2
+    ignore = mergeWith $ \edge -> id
+
+mergeWithBody :: DependencyGr -> Bool
+mergeWithBody (SimpleGraph g) = all isBody $ Graph.labEdges merged where
+    isBody (_, _, dependency) = case dependency of
+        Body -> True
+        _    -> False
+    merged = mergeWith body Graph.empty g
+
 treeTest :: Module.CanonicalModule -> Assertion
 treeTest modul = assertBool failMessage (hasLoop treeCallGraph) where
     (treeCallGraph, env) = runState (callGraph modul) Env.empty :: (DependencyGraph Gr, VarEnv)
