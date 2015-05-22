@@ -78,6 +78,7 @@ Library
         Generate.Substitute,
         Nitpick.TopLevelTypes,
         Optimize.CallGraph,
+        Optimize.Environment,
         Parse.Binop,
         Parse.Declaration,
         Parse.Expression,
@@ -188,6 +189,7 @@ Test-Suite compiler-tests
         Test.Compiler
         Test.Property
         Test.Property.Arbitrary
+        Test.Optimize.CallGraph
         AST.Helpers
         AST.Literal
         Reporting.PrettyPrint
