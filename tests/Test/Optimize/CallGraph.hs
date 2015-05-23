@@ -3,10 +3,11 @@ module Test.Optimize.CallGraph where
 import qualified Data.Map as Map
 import System.FilePath ((</>))
 import Control.Applicative ((<$>))
-import Control.Monad.State (evalState, runState)
+import Control.Monad.State (State, evalState, runState, execState)
 import qualified Data.Graph.Inductive.Graph as Graph
 import Data.Graph.Inductive.Basic (hasLoop)
 import Data.Graph.Inductive.PatriciaTree (Gr)
+import Data.List (intersect)
 
 import Test.Framework
 import Test.Framework.Providers.HUnit (testCase)
@@ -24,15 +25,44 @@ import Reporting.Error (Error)
 import qualified Reporting.Error as Error
 import Reporting.Warning (Warning)
 import Reporting.Result (Result(Result), RawResult(Ok, Err))
+import qualified AST.Variable as Var
 
 type DependencyGr = SimpleGraph Gr () Dependency
 
 callGraphTests :: [Test]
 callGraphTests = 
     [ buildTest $ testModule "Tree.elm" treeTest 
-    , buildTest $ testModule ("Soundness" </> "Id.elm") idTest 
+    , buildTest $ testModule ("Soundness" </> "Id.elm") idTest
+    , buildTest envDefsTest
+    , buildTest envNestedDefsTest
     , testProperty "mergeWith identity" mergeWithIdentity
     , testProperty "mergeWith body" mergeWithBody ]
+
+envDefsTest :: IO Test
+envDefsTest = testModule "Defs.elm" $ \modul -> 
+    let env = execState (callGraph modul :: State VarEnv (DependencyGraph Gr)) Env.empty
+        variables = 
+            [ Var.Canonical { Var.home = Var.Local, Var.name = "a" }
+            , Var.Canonical { Var.home = Var.Local, Var.name = "b" }
+            , Var.Canonical { Var.home = Var.Local, Var.name = "c" } ]
+        hasVariables = (Map.keys . Env.inScope $ env) == variables
+        failMessage = unlines $ 
+            [ "environment should contain bindings of all top-level names."
+            , show . Module.program . Module.body $ modul
+            , show env ]
+    in assertBool failMessage hasVariables 
+
+envNestedDefsTest :: IO Test
+envNestedDefsTest = testModule ("Soundness" </> "Apply.elm") $ \modul -> 
+    let env = execState (callGraph modul :: State VarEnv (DependencyGraph Gr)) Env.empty
+        variables = 
+            [ Var.Canonical { Var.home = Var.Local, Var.name = "apply" }
+            , Var.Canonical { Var.home = Var.Local, Var.name = "g" } ]
+        hasVariables = (Map.keys . Env.inScope $ env) == variables
+        failMessage = unlines $
+            [ "environment should contain bindings of function names in nested scopes."
+            , show env ]
+    in assertBool failMessage hasVariables
 
 mergeWithIdentity :: DependencyGr -> DependencyGr -> Bool
 mergeWithIdentity (SimpleGraph g1) (SimpleGraph g2) = Graph.equal merged g1 where
