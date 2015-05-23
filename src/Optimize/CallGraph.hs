@@ -33,7 +33,9 @@ callGraph :: DynGraph graph
 callGraph modul = case Module.program . Module.body $ modul of
     A _ expr -> case expr of
         (E.Let defs _) -> foldrM (checkDef []) Graph.empty defs
-        _ -> error "[Compiler error]: The top-level expression in a module should be a let-expression after canonicalization."
+        _ -> error $ unlines 
+            [ "[Compiler error]: The top-level expression in a module" 
+            , " should be a let-expression after canonicalization." ]
 
 checkDef :: DynGraph graph 
     => [Var.Canonical]
@@ -42,9 +44,8 @@ checkDef :: DynGraph graph
     -> State VarEnv (DependencyGraph graph)
 checkDef boundVariables (Canonical.Definition annotatedPat expr _) tailCalls = case annotatedPat of
     A _ pat -> case pat of
-        Pattern.Var str        -> do
-            (env, var) <- Env.fresh <$> get <*> (return $ Var.Canonical Var.Local str)
-            put env
+        Pattern.Var str -> do
+            var <- Env.freshVar (Var.Canonical { Var.home = Var.Local, Var.name =  str })
             checkExpr var boundVariables expr tailCalls
 
         _ -> return tailCalls
@@ -63,8 +64,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         if canonicalVar `elem` boundVariables
         then return tailCalls
         else do
-            (env, var') <- Env.variable <$> get <*> return canonicalVar
-            put env
+            var' <- Env.getVar canonicalVar 
             return $ updateEdge (var, var', Tail) tailCalls
     
     E.Range lowExpr highExpr              -> do
@@ -89,9 +89,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         rightCalls :: DependencyGraph graph <- 
             checkExpr var boundVariables rightArgExpr Graph.empty
 
-        (env, binOp) <- Env.variable <$> get <*> return binOpVar
-        put env
-
+        binOp <- Env.getVar binOpVar
         return $ (updateEdge (var, binOp, Tail) $ (mergeWith body) leftCalls rightCalls)
 
     E.Lambda pat expr'                    -> 
