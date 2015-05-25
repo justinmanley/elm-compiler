@@ -26,6 +26,7 @@ import qualified Reporting.Error as Error
 import Reporting.Warning (Warning)
 import Reporting.Result (Result(Result), RawResult(Ok, Err))
 import qualified AST.Variable as Var
+import Reporting.PrettyPrint (pretty)
 
 type DependencyGr = SimpleGraph Gr () Dependency
 
@@ -48,7 +49,7 @@ envDefsTest = testModule "Defs.elm" $ \modul ->
         hasVariables = (Map.keys . Env.inScope $ env) == variables
         failMessage = unlines $ 
             [ "environment should contain bindings of all top-level names."
-            , show . Module.program . Module.body $ modul
+            , show . pretty False . Module.program . Module.body $ modul
             , show env ]
     in assertBool failMessage hasVariables 
 
@@ -82,6 +83,7 @@ treeTest modul = assertBool failMessage (hasLoop treeCallGraph) where
     failMessage = unlines $
         [ "recursive function should cause a loop in the call graph."
         , Graph.prettify treeCallGraph
+        , show . pretty False . Module.program . Module.body $ modul
         , show env ] 
 
 idTest :: Module.CanonicalModule -> Assertion
@@ -99,11 +101,10 @@ testModule :: FilePath
     -> IO Test
 testModule filePath satisfiesProperty = do
     sourceCode <- readFile $ testsDir </> filePath
-
     let Result _ result = Compile.compile "elm-lang" "core" True Map.empty sourceCode
     let errorToString = Error.toString filePath sourceCode
 
     return $ testCase (testsDir </> filePath) $ case result of 
         Ok modul   -> satisfiesProperty modul
-        Err errors -> assertFailure $ concatMap errorToString  errors
+        Err errors -> assertFailure $ concatMap errorToString errors
 

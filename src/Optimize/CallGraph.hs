@@ -5,7 +5,7 @@ module Optimize.CallGraph where
 import qualified Data.Graph.Inductive.Graph as Graph
 import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
 import Control.Monad.State
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative ((<$>))
 import Data.Foldable (foldrM)
 
 import qualified AST.Expression.Canonical as Canonical
@@ -16,8 +16,8 @@ import AST.Pattern (CanonicalPattern)
 import qualified AST.Expression.General as E
 import Reporting.Annotation ( Annotated(A) )
 import AST.Module ( CanonicalModule )
-
 import qualified Optimize.Environment as Env
+import AST.Expression.General (saveEnvName) 
 
 data Dependency
     = Body
@@ -30,12 +30,23 @@ type DependencyGraph graph = graph () Dependency
 callGraph :: DynGraph graph 
     => CanonicalModule 
     -> State VarEnv (DependencyGraph graph)
-callGraph modul = case Module.program . Module.body $ modul of
-    A _ expr -> case expr of
-        (E.Let defs _) -> foldrM (checkDef []) Graph.empty defs
-        _ -> error $ unlines 
+callGraph modul = 
+    let expr@(A _ expr') = Module.program . Module.body $ modul
+    in case expr' of
+        (E.Let _ _) -> checkTopLevelExpr [] expr Graph.empty 
+        _              -> error $ unlines 
             [ "[Compiler error]: The top-level expression in a module" 
-            , " should be a let-expression after canonicalization." ]
+            , " should be a let-expression after canonicalization." ] 
+
+checkTopLevelExpr :: DynGraph graph
+    => [Var.Canonical]
+    -> Canonical.Expr
+    -> DependencyGraph graph
+    -> State VarEnv (DependencyGraph graph)
+checkTopLevelExpr boundVariables (A _ expr) callGr = case expr of
+    (E.Let defs bodyExpr) -> 
+        (checkTopLevelExpr boundVariables bodyExpr) =<< (foldrM (checkDef boundVariables) callGr defs)
+    _ -> return callGr
 
 checkDef :: DynGraph graph 
     => [Var.Canonical]
@@ -61,7 +72,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         return tailCalls 
     
     E.Var canonicalVar                    -> 
-        if canonicalVar `elem` boundVariables
+        if canonicalVar `elem` saveEnvVar:boundVariables
         then return tailCalls
         else do
             var' <- Env.getVar canonicalVar 
@@ -238,3 +249,6 @@ updateEdge (n1, n2, label) g = let
     in case edge (n1, n2) g' of
         Nothing -> Graph.insEdge (n1, n2, label) g'
         Just _  -> Graph.insEdge (n1, n2, label) $ Graph.delEdge (1,2) g'
+
+saveEnvVar :: Var.Canonical
+saveEnvVar = Var.Canonical { Var.home = Var.BuiltIn, Var.name = saveEnvName }
