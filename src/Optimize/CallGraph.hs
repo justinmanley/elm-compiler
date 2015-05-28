@@ -91,7 +91,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         explicitListCalls :: [DependencyGraph graph] <-
             mapM (\expr'  -> checkExpr var boundVariables expr' Graph.empty) exprs
 
-        return $ foldr (mergeWith bodyReplacesTail) tailCalls explicitListCalls
+        return $ foldr (mergeWith fixBody) tailCalls explicitListCalls
 
     E.Binop binOpVar leftArgExpr rightArgExpr  -> do
         leftCalls :: DependencyGraph graph <- 
@@ -116,7 +116,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         multiIfCalls :: [DependencyGraph graph] <- 
             mapM (checkIfExpr var boundVariables Graph.empty) ifExprs
 
-        return $ foldr (mergeWith bodyReplacesTail) tailCalls multiIfCalls
+        return $ foldr (mergeWith fixBody) tailCalls multiIfCalls
 
     E.Let defs expr'                      ->
         checkExpr var boundVariables expr' =<< (foldrM (checkDef boundVariables) tailCalls defs)
@@ -128,7 +128,7 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
         caseCalls :: [DependencyGraph graph] <- 
             mapM (checkCaseExpr var boundVariables Graph.empty) cases
 
-        return $ (mergeWith doesNotOccur) targetExprCalls (foldr (mergeWith bodyReplacesTail) tailCalls caseCalls)
+        return $ mergeWith doesNotOccur targetExprCalls (foldr (mergeWith fixBody) tailCalls caseCalls)
     
     E.Data _ exprs                        -> do
         argExprs :: [DependencyGraph graph] <-
@@ -208,8 +208,8 @@ body (var1, var2, _) callGraph = updateEdge (var1, var2, Body) callGraph
 
 -- | Perform a biased merge of the labeled edge (var1, var2, dep) into callGraph
 --   so that the Body label will never be replaced by the Tail label.
-bodyReplacesTail :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
-bodyReplacesTail (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
+fixBody :: DynGraph graph => LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph
+fixBody (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
     Nothing   -> updateEdge (var1, var2, dep) callGraph
     Just (_, _, previousDep) -> case previousDep of
         Tail -> updateEdge (var1, var2, dep) callGraph
@@ -225,10 +225,14 @@ doesNotOccur (var1, var2, _) callGraph = case edge (var1, var2) callGraph of
 -- | If the graph contains an edge from src to dest, return that edge inside a Just.
 --   Otherwise, return Nothing. 
 --   Assumes that there can only be one edge in each direction between any pair of edges.
+-- i.e. assumes that g is a simple digraph.
 edge :: DynGraph graph => (Node, Node) -> graph a b -> Maybe (LEdge b)
-edge (src, dest) gr = case filter (\(_, n2, _) -> n2 == dest) $ Graph.out gr src of
-    []        -> Nothing
-    labEdge:_ -> Just labEdge
+edge (src, dest) gr = 
+    if src `gelem` gr --somehow this is called on a src node which doesn't exist in the graph. Why?
+    then case filter (\(_, n2, _) -> n2 == dest) $ Graph.out gr src of
+        []        -> Nothing
+        labEdge:_ -> Just labEdge
+    else Nothing 
 
 mergeWith :: DynGraph graph
     => (LEdge Dependency -> DependencyGraph graph -> DependencyGraph graph)
@@ -248,7 +252,7 @@ updateEdge (n1, n2, label) g = let
         g' = (addNodeIfMissing n2 . addNodeIfMissing n1) g
     in case edge (n1, n2) g' of
         Nothing -> Graph.insEdge (n1, n2, label) g'
-        Just _  -> Graph.insEdge (n1, n2, label) $ Graph.delEdge (1,2) g'
+        Just _  -> Graph.insEdge (n1, n2, label) $ Graph.delEdge (n1, n2) g'
 
 saveEnvVar :: Var.Canonical
 saveEnvVar = Var.Canonical { Var.home = Var.BuiltIn, Var.name = saveEnvName }

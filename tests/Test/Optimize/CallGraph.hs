@@ -8,11 +8,13 @@ import qualified Data.Graph.Inductive.Graph as Graph
 import Data.Graph.Inductive.Basic (hasLoop)
 import Data.Graph.Inductive.PatriciaTree (Gr)
 import Data.List (intersect)
+import Data.Ix (inRange)
 
 import Test.Framework
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, assertFailure, assertBool)
 import Test.Framework.Providers.QuickCheck2
+import Test.QuickCheck (Arbitrary)
 
 import Test.Arbitrary.Graph
 import Test.Arbitrary.CallGraph
@@ -33,11 +35,17 @@ type DependencyGr = SimpleGraph Gr () Dependency
 callGraphTests :: [Test]
 callGraphTests = 
     [ buildTest $ testModule "Tree.elm" treeTest 
+    , buildTest $ testModule "TreeRecord.elm" treeTest
     , buildTest $ testModule ("Soundness" </> "Id.elm") idTest
     , buildTest envDefsTest
     , buildTest envNestedDefsTest
     , testProperty "mergeWith identity" mergeWithIdentity
-    , testProperty "mergeWith body" mergeWithBody ]
+    , testProperty "mergeWith body" mergeWithBody
+    , testProperty "mergeWith doesNotOccur" mergeWithDoesNotOccur
+    , testProperty "mergeWith fixBody" mergeWithFixBody
+    , testProperty "updateEdge adds at most one edge" updateEdgeTest
+    , testProperty "fixBody" fixBodyTest
+    ]
 
 envDefsTest :: IO Test
 envDefsTest = testModule "Defs.elm" $ \modul -> 
@@ -72,19 +80,48 @@ mergeWithIdentity (SimpleGraph g1) (SimpleGraph g2) = Graph.equal merged g1 wher
 
 mergeWithBody :: DependencyGr -> Bool
 mergeWithBody (SimpleGraph g) = all isBody $ Graph.labEdges merged where
-    isBody (_, _, dependency) = case dependency of
-        Body -> True
-        _    -> False
     merged = mergeWith body Graph.empty g
+
+mergeWithDoesNotOccur :: DependencyGr -> Bool
+mergeWithDoesNotOccur (SimpleGraph g) = all isBody $ Graph.labEdges merged where
+    merged = mergeWith doesNotOccur g g
+
+mergeWithFixBody :: DependencyGr -> Bool
+mergeWithFixBody (SimpleGraph g) = all isBody $ Graph.labEdges merged where
+    merged = mergeWith fixBody (Graph.emap swapDependency g) g
+
+fixBodyTest :: DependencyGr -> Bool
+fixBodyTest (SimpleGraph g) = case Graph.labEdges g of
+    []      -> True
+    ledge:_ -> 
+        let esize = length $ Graph.labEdges g
+            g' = fixBody ledge g
+        in (length $ Graph.labEdges g') == esize
+
+swapDependency :: Dependency -> Dependency
+swapDependency dep = case dep of
+    Body -> Tail
+    Tail -> Body
+
+-- | Helper function for mergeWith tests.
+isBody :: Graph.LEdge Dependency -> Bool
+isBody (_, _, dependency) = case dependency of
+    Body -> True
+    _    -> False
+
+updateEdgeTest :: Graph.LEdge Dependency -> SimpleGraph Gr () Dependency -> Bool
+updateEdgeTest ledge (SimpleGraph g) = inRange (size, size + 1) updatedSize where
+    size = length . Graph.labEdges $ g
+    updatedSize = length . Graph.labEdges $ updateEdge ledge g
 
 treeTest :: Module.CanonicalModule -> Assertion
 treeTest modul = assertBool failMessage (hasLoop treeCallGraph) where
     (treeCallGraph, env) = runState (callGraph modul) Env.empty :: (DependencyGraph Gr, VarEnv)
     failMessage = unlines $
         [ "recursive function should cause a loop in the call graph."
-        , Graph.prettify treeCallGraph
+        , "final call graph: " ++ Graph.prettify treeCallGraph
         , show . pretty False . Module.program . Module.body $ modul
-        , show env ] 
+        , "final env: " ++ show env ] 
 
 idTest :: Module.CanonicalModule -> Assertion
 idTest modul = assertBool failMessage (not . hasLoop $ idCallGraph) where
