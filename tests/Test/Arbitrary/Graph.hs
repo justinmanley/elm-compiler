@@ -22,7 +22,7 @@ randomGraph :: (DynGraph gr, Arbitrary a, Arbitrary b)
     -> Gen (gr a b)
 randomGraph density = sized $ \n -> 
     let nodes = [1..n]
-        lnodes = zip nodes <$> arbitrary
+        lnodes = zip nodes <$> vectorOf n arbitrary
 
         possibleEdges = fmap concat $ forM nodes $ \source -> 
             let targets = [1..source - 1] ++ [source + 1..n] 
