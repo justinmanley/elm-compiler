@@ -8,12 +8,12 @@ import qualified AST.Variable as Var
 import qualified Optimize.Info as Optimize
 import qualified Reporting.Region as R
 
-type Expr =
-  General.Expr (R.Region, Optimize.Info) Canonical.Def Var.Analyzed Type.Canonical
+type Expr ann =
+  General.Expr ann (Def ann) Var.Analyzed Type.Canonical
 
-type Expr' =
-  General.Expr' (R.Region, Optimize.Info) Canonical.Def Var.Analyzed Type.Canonical
+type Expr' ann =
+  General.Expr' ann (Def ann) Var.Analyzed Type.Canonical
 
-data Def = 
-    Definition Pattern.AnalyzedPattern Expr (Maybe Type.Canonical)  
+data Def ann = 
+    Definition (Pattern.AnalyzedPattern ann) (Expr ann) (Maybe Type.Canonical)  
     deriving Show

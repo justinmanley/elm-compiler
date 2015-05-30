@@ -63,10 +63,10 @@ type CanonicalModule =
 type CanonicalBody = ModuleBody Canonical.Expr
 
 
-type AnalyzedModule =
-    Module [Name] [Var.Value] AnalyzedBody
+type AnalyzedModule ann =
+    Module [Name] [Var.Value] (AnalyzedBody ann)
 
-type AnalyzedBody = ModuleBody Analyzed.Expr    
+type AnalyzedBody ann = ModuleBody (Analyzed.Expr ann)
 
 
 data Module imports exports body = Module

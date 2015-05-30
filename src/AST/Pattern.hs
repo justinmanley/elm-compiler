@@ -38,8 +38,8 @@ type CanonicalPattern =
     Pattern R.Region Var.Canonical String
 
 
-type AnalyzedPattern = 
-    Pattern (R.Region, Optimize.Info) Var.Analyzed
+type AnalyzedPattern ann = 
+    Pattern ann Var.Analyzed
 
 list :: R.Position -> [RawPattern] -> RawPattern
 list end patterns =
