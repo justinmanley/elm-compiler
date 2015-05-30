@@ -1,3 +1,6 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
+
 module AST.Module
     ( Interfaces
     , Types, Aliases, ADTs
@@ -82,7 +85,6 @@ data ModuleBody expr = ModuleBody
     , datatypes :: ADTs
     , ports     :: [String]
     }
-
 
 -- HEADERS
 

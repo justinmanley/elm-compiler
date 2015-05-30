@@ -10,7 +10,7 @@ import qualified AST.Variable as Var
 import qualified Reporting.Annotation as A
 import qualified Reporting.PrettyPrint as P
 import qualified Reporting.Region as R
-
+import qualified Optimize.Info as Optimize
 
 type Pattern ann var local =
     A.Annotated ann (Pattern' ann var local)
@@ -37,6 +37,9 @@ type RawPattern' =
 type CanonicalPattern =
     Pattern R.Region Var.Canonical String
 
+
+type AnalyzedPattern = 
+    Pattern (R.Region, Optimize.Info) Var.Analyzed
 
 list :: R.Position -> [RawPattern] -> RawPattern
 list end patterns =

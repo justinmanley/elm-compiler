@@ -2,11 +2,14 @@ module Optimize.Info where
 
 import Data.Set (Set)
 
-data Info = Info 
-    { branchType :: InductiveType
-    , contains :: Set String -- names referenced in the expression
-    }
+import qualified AST.Variable as Var
 
-data InductiveType
+data Info = Info 
+    { role :: RecursionRole
+    , contains :: Set Var.Analyzed
+    } deriving Show
+
+data RecursionRole
     = BaseCase
     | TailRecursiveCase
+    deriving (Show, Eq)
