@@ -2,8 +2,10 @@ module AST.Module
     ( Interfaces
     , Types, Aliases, ADTs
     , AdtInfo, CanonicalAdt
-    , SourceModule, ValidModule, CanonicalModule
-    , Module(..), CanonicalBody(..)
+    , SourceModule, ValidModule
+    , CanonicalModule, CanonicalBody
+    , AnalyzedModule, AnalyzedBody
+    , Module(..), ModuleBody(..)
     , Header(..)
     , Name, nameToString, nameIsNative
     , Interface(..), toInterface
@@ -16,6 +18,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 
 import qualified AST.Declaration as Decl
+import qualified AST.Expression.Analyzed as Analyzed
 import qualified AST.Expression.Canonical as Canonical
 import qualified AST.Type as Type
 import qualified AST.Variable as Var
@@ -54,6 +57,14 @@ type ValidModule =
 type CanonicalModule =
     Module [Name] [Var.Value] CanonicalBody
 
+type CanonicalBody = ModuleBody Canonical.Expr
+
+
+type AnalyzedModule =
+    Module [Name] [Var.Value] AnalyzedBody
+
+type AnalyzedBody = ModuleBody Analyzed.Expr    
+
 
 data Module imports exports body = Module
     { names   :: Name
@@ -63,8 +74,8 @@ data Module imports exports body = Module
     , body    :: body
     }
 
-data CanonicalBody = CanonicalBody
-    { program   :: Canonical.Expr
+data ModuleBody expr = ModuleBody
+    { program   :: expr
     , types     :: Types
     , fixities  :: [(Decl.Assoc, Int, String)]
     , aliases   :: Aliases

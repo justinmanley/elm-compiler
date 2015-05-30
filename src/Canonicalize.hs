@@ -8,7 +8,7 @@ import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
 import AST.Expression.General (Expr'(..), dummyLet)
-import AST.Module (CanonicalBody(..))
+import AST.Module (ModuleBody(..), CanonicalBody)
 
 import qualified AST.Declaration as D
 import qualified AST.Expression.General as E
@@ -56,7 +56,7 @@ type AlmostCanonicalModule =
     Module.Module
       ([Module.DefaultImport], [Module.UserImport])
       [Var.Value]
-      Module.CanonicalBody
+      CanonicalBody
 
 
 moduleHelp
@@ -87,7 +87,7 @@ moduleHelp interfaces modul@(Module.Module _ _ exports _ decls) =
     body decls =
         let nakedDecls = map A.drop decls
         in
-        Module.CanonicalBody
+        Module.ModuleBody
           { program =
               let expr = Decls.toExpr (Module.names modul) decls
               in

@@ -57,7 +57,7 @@ envDefsTest = testModule "Defs.elm" $ \modul ->
         hasVariables = (Map.keys . Env.inScope $ env) == variables
         failMessage = unlines $ 
             [ "environment should contain bindings of all top-level names."
-            , show . pretty False . Module.program . Module.body $ modul
+            , show . pretty Map.empty False . Module.program . Module.body $ modul
             , show env ]
     in assertBool failMessage hasVariables 
 
@@ -120,7 +120,7 @@ treeTest modul = assertBool failMessage (hasLoop treeCallGraph) where
     failMessage = unlines $
         [ "recursive function should cause a loop in the call graph."
         , "final call graph: " ++ Graph.prettify treeCallGraph
-        , show . pretty False . Module.program . Module.body $ modul
+        , show . pretty Map.empty False . Module.program . Module.body $ modul
         , "final env: " ++ show env ] 
 
 idTest :: Module.CanonicalModule -> Assertion
@@ -139,7 +139,7 @@ testModule :: FilePath
 testModule filePath satisfiesProperty = do
     sourceCode <- readFile $ testsDir </> filePath
     let Result _ result = Compile.compile "elm-lang" "core" True Map.empty sourceCode
-    let errorToString = Error.toString filePath sourceCode
+    let errorToString = Error.toString Map.empty filePath sourceCode
 
     return $ testCase (testsDir </> filePath) $ case result of 
         Ok modul   -> satisfiesProperty modul
