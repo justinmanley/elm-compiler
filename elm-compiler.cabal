@@ -81,6 +81,7 @@ Library
         Optimize.CallGraph,
         Optimize.Environment,
         Optimize.Info,
+        Optimize.Variable,
         Parse.Binop,
         Parse.Declaration,
         Parse.Expression,
