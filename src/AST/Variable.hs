@@ -138,6 +138,9 @@ instance ToString Canonical where
         Module path -> List.intercalate "." (path ++ [name])
         Local -> name
 
+instance ToString Analyzed where
+  toString (Analyzed _ varId) = '$' : show varId
+
 
 -- LISTINGS
 
@@ -228,8 +231,10 @@ instance P.Pretty Canonical where
         name = toString var
       in
         P.text (maybe name id (Map.lookup name dealiaser))
-
-
+        
+instance P.Pretty Analyzed where
+  pretty _ _ var = P.text $ toString var
+        
 instance P.Pretty a => P.Pretty (Listing a) where
   pretty dealiaser _ (Listing explicits open) =
       let dots = [if open then P.text ".." else P.empty]

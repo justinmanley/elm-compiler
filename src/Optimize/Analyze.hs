@@ -12,6 +12,7 @@ import AST.Module (Module(Module), ModuleBody(ModuleBody)
 import qualified AST.Variable as Var
 import qualified Optimize.Info as Optimize 
 import Optimize.Info (Info(Info), role, contains)
+import Optimize.Variable (uniquify)
 import Reporting.Annotation ( Annotated(A) )
 import qualified Reporting.Region as R
 

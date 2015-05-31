@@ -18,6 +18,7 @@ import qualified AST.Variable as Var
 import qualified Reporting.Annotation as A
 import qualified Reporting.PrettyPrint as P
 
+import Debug.Trace (trace)
 
 ---- GENERAL AST ----
 
@@ -121,7 +122,7 @@ instance (P.Pretty def, P.Pretty var, Var.ToString var, Var.ToString local)
           P.pretty dealiaser needsParens literal
 
       Var x ->
-          P.pretty dealiaser needsParens x
+          trace (show x) (P.pretty dealiaser needsParens x)
 
       Range lowExpr highExpr ->
           P.brackets $
