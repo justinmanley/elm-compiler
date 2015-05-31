@@ -16,6 +16,7 @@ import Test.HUnit (Assertion, assertFailure, assertBool)
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck (Arbitrary)
 
+import Test.Utils (testModule)
 import Test.Arbitrary.Graph
 import Test.Arbitrary.CallGraph
 
@@ -133,15 +134,4 @@ idTest modul = assertBool failMessage (not . hasLoop $ idCallGraph) where
 testsDir :: FilePath
 testsDir = "tests" </> "test-files" </> "good"
 
-testModule :: FilePath
-    -> (Module.CanonicalModule -> Assertion)
-    -> IO Test
-testModule filePath satisfiesProperty = do
-    sourceCode <- readFile $ testsDir </> filePath
-    let Result _ result = Compile.compile "elm-lang" "core" True Map.empty sourceCode
-    let errorToString = Error.toString Map.empty filePath sourceCode
-
-    return $ testCase (testsDir </> filePath) $ case result of 
-        Ok modul   -> satisfiesProperty modul
-        Err errors -> assertFailure $ concatMap errorToString errors
 
