@@ -12,10 +12,10 @@ import qualified Reporting.Error as Error
 import Reporting.PrettyPrint (Pretty, pretty)
 import Reporting.Result (Result(Result), RawResult(Ok, Err))
 
-testModule :: FilePath
-    -> (Module.CanonicalModule -> Assertion)
+testModule :: (Module.CanonicalModule -> Assertion)
+    -> FilePath
     -> IO Test
-testModule filePath satisfiesProperty = do
+testModule satisfiesProperty filePath = do
     sourceCode <- readFile $ testsDir </> filePath
     let Result _ result = Compile.compile "elm-lang" "core" True Map.empty sourceCode
     let errorToString = Error.toString Map.empty filePath sourceCode

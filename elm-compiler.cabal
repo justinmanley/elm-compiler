@@ -193,6 +193,8 @@ Test-Suite compiler-tests
         Test.Property
         Test.Property.Arbitrary
         Test.Optimize.CallGraph
+        Test.Optimize.Variable
+        Test.Utils
         AST.Helpers
         AST.Literal
         Reporting.PrettyPrint
