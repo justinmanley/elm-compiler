@@ -9,6 +9,7 @@ import qualified AST.Pattern as Pattern
 import qualified AST.Type as Type
 import qualified AST.Variable as Var
 import qualified Optimize.Info as Optimize
+import qualified Reporting.Annotation as A
 import qualified Reporting.PrettyPrint as P
 import qualified Reporting.Region as R
 
@@ -19,7 +20,7 @@ type Expr' ann =
   General.Expr' ann (Def ann) Var.Analyzed Type.Canonical
 
 data Def ann = 
-    Definition (Pattern.AnalyzedPattern ann) (Expr ann) (Maybe Type.Canonical)  
+    Definition (Pattern.AnalyzedPattern ann) (Expr ann) (Maybe (A.Located Type.Canonical))  
     deriving Show
 
 -- Copied directly from the P.Pretty instance for Canonical.Def.
