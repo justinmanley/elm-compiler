@@ -3,7 +3,8 @@
 module Optimize.CallGraph where
 
 import qualified Data.Graph.Inductive.Graph as Graph
-import Data.Graph.Inductive.Graph (DynGraph, Node, LEdge, gelem)
+import Data.Graph.Inductive (Node, LEdge, gelem)
+import Data.Graph.Inductive.PatriciaTree (Gr)
 import Control.Monad.State
 import Control.Applicative ((<$>))
 import Data.Foldable (foldrM)
@@ -15,7 +16,6 @@ import qualified AST.Pattern as Pattern
 import AST.Pattern (CanonicalPattern)
 import qualified AST.Expression.General as E
 import Reporting.Annotation ( Annotated(A) )
-import AST.Module ( CanonicalModule )
 import qualified Optimize.Environment as Env
 import AST.Expression.General (saveEnvName) 
 
@@ -25,8 +25,11 @@ data Dependency
     deriving (Show, Eq)
 
 type VarEnv = Env.Environment Var.Canonical
-type DependencyGraph graph = graph () Dependency
+type DependencyGraph = Gr () Dependency
 
+callGraph :: Module.AnalyzedModule ann -> DependencyGraph
+callGraph = undefined
+{-
 callGraph :: DynGraph graph 
     => CanonicalModule 
     -> State VarEnv (DependencyGraph graph)
@@ -256,3 +259,4 @@ updateEdge (n1, n2, label) g = let
 
 saveEnvVar :: Var.Canonical
 saveEnvVar = Var.Canonical { Var.home = Var.BuiltIn, Var.name = saveEnvName }
+-}

@@ -118,13 +118,13 @@ uniquifyPat scope (A ann pat) = fmap (A ann) $ case pat of
             <$> getVar scope cons
             <*> mapM (uniquifyPat scope) pats
 
-    Pat.Record fieldNames -> return $ 
-        Pat.Record fieldNames  
+    Pat.Record fieldNames -> return $
+         Pat.Record fieldNames 
 
-    Pat.Alias str aliasPat ->  
-        Pat.Alias str <$> (uniquifyPat scope aliasPat)
+    Pat.Alias alias aliasPat ->  
+        Pat.Alias alias  <$> (uniquifyPat scope aliasPat)
 
-    Pat.Var str -> return $ Pat.Var str 
+    Pat.Var name -> return $ Pat.Var name 
 
     Pat.Literal lit -> return $ Pat.Literal lit
 
