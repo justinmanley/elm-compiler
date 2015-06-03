@@ -36,29 +36,30 @@ move through the compilation process. The type holes are used to represent:
        with information about what module a variable came from.
 
 -}
-type Expr annotation definition variable tipe =
-    A.Annotated annotation (Expr' annotation definition variable tipe)
+type Expr annotation definition variable local tipe =
+    A.Annotated annotation (Expr' annotation definition variable local tipe)
 
 
-data Expr' ann def var typ
+data Expr' ann def var local typ
     = Literal Literal.Literal
     | Var var
-    | Range (Expr ann def var typ) (Expr ann def var typ)
-    | ExplicitList [Expr ann def var typ]
-    | Binop var (Expr ann def var typ) (Expr ann def var typ)
-    | Lambda (Pattern.Pattern ann var) (Expr ann def var typ)
-    | App (Expr ann def var typ) (Expr ann def var typ)
-    | MultiIf [(Expr ann def var typ,Expr ann def var typ)]
-    | Let [def] (Expr ann def var typ)
-    | Case (Expr ann def var typ) [(Pattern.Pattern ann var, Expr ann def var typ)]
-    | Data String [Expr ann def var typ]
-    | Access (Expr ann def var typ) String
-    | Remove (Expr ann def var typ) String
-    | Insert (Expr ann def var typ) String (Expr ann def var typ)
-    | Modify (Expr ann def var typ) [(String, Expr ann def var typ)]
-    | Record [(String, Expr ann def var typ)]
+    | Range (Expr ann def var local typ) (Expr ann def var local typ)
+    | ExplicitList [Expr ann def var local typ]
+    | Binop var (Expr ann def var local typ) (Expr ann def var local typ)
+    | Lambda (Pattern.Pattern ann var local) (Expr ann def var local typ)
+    | App (Expr ann def var local typ) (Expr ann def var local typ)
+    | MultiIf [(Expr ann def var local typ,Expr ann def var local typ)]
+    | Let [def] (Expr ann def var local typ)
+    | Case (Expr ann def var local typ) 
+        [(Pattern.Pattern ann var local, Expr ann def var local typ)]
+    | Data String [Expr ann def var local typ]
+    | Access (Expr ann def var local typ) String
+    | Remove (Expr ann def var local typ) String
+    | Insert (Expr ann def var local typ) String (Expr ann def var local typ)
+    | Modify (Expr ann def var local typ) [(String, Expr ann def var local typ)]
+    | Record [(String, Expr ann def var local typ)]
     -- for type checking and code gen only
-    | Port (PortImpl (Expr ann def var typ) typ)
+    | Port (PortImpl (Expr ann def var local typ) typ)
     | GLShader String String Literal.GLShaderTipe
     deriving (Show)
 
@@ -82,17 +83,17 @@ portName impl =
 
 ---- UTILITIES ----
 
-rawVar :: String -> Expr' ann def Var.Raw typ
+rawVar :: String -> Expr' ann def Var.Raw local typ
 rawVar x =
   Var (Var.Raw x)
 
 
-localVar :: String -> Expr' ann def Var.Canonical typ
+localVar :: String -> Expr' ann def Var.Canonical local typ
 localVar x =
   Var (Var.Canonical Var.Local x)
 
 
-tuple :: [Expr ann def var typ] -> Expr' ann def var typ
+tuple :: [Expr ann def var local typ] -> Expr' ann def var local typ
 tuple expressions =
   Data ("_Tuple" ++ show (length expressions)) expressions
 
@@ -102,7 +103,7 @@ saveEnvName =
   "_save_the_environment!!!"
 
 
-dummyLet :: (P.Pretty def) => [def] -> Expr ann def Var.Canonical typ
+dummyLet :: (P.Pretty def) => [def] -> Expr ann def Var.Canonical local typ
 dummyLet defs =
   let body =
         A.A undefined (Var (Var.builtin saveEnvName))
@@ -112,7 +113,8 @@ dummyLet defs =
 
 -- PRETTY PRINTING
 
-instance (P.Pretty def, P.Pretty var, Var.ToString var) => P.Pretty (Expr' ann def var typ) where
+instance (P.Pretty def, P.Pretty var, Var.ToString var, Var.ToString local) 
+  => P.Pretty (Expr' ann def var local typ) where
   pretty dealiaser needsParens expression =
     case expression of
       Literal literal ->
@@ -269,7 +271,7 @@ instance P.Pretty (PortImpl expr tipe) where
       P.text ("<port:" ++ portName impl ++ ">")
 
 
-collectApps :: Expr ann def var typ -> [Expr ann def var typ]
+collectApps :: Expr ann def var local typ -> [Expr ann def var local typ]
 collectApps annExpr@(A.A _ expr) =
   case expr of
     App a b -> collectApps a ++ [b]
@@ -277,8 +279,8 @@ collectApps annExpr@(A.A _ expr) =
 
 
 collectLambdas
-    :: Expr ann def var typ
-    -> ([Pattern.Pattern ann var], Expr ann def var typ)
+    :: Expr ann def var local typ
+    -> ([Pattern.Pattern ann var local], Expr ann def var local typ)
 collectLambdas lexpr@(A.A _ expr) =
   case expr of
     Lambda pattern body ->
