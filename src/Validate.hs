@@ -13,6 +13,7 @@ import qualified AST.Expression.Valid as Valid
 import qualified AST.Declaration as D
 import qualified AST.Pattern as Pattern
 import qualified AST.Type as Type
+import qualified AST.Variable as Var
 import Elm.Utils ((|>))
 import qualified Reporting.Annotation as A
 import qualified Reporting.Error.Syntax as Error
@@ -80,11 +81,11 @@ validateDeclsHelp comment (A.A region decl) decls =
 
 -- VALIDATE DEFINITIONS IN DECLARATIONS
 
-defHelp
-    :: Maybe String
-    -> Source.Def
-    -> [D.SourceDecl]
-    -> Result.Result wrn Error.Error [D.ValidDecl]
+--defHelp
+--    :: Maybe String
+--    -> Source.Def
+--    -> [D.SourceDecl]
+--    -> Result.Result wrn Error.Error [D.ValidDecl]
 defHelp comment (A.A region def) decls =
   let addRest def' rest =
         (:) (A.A (region, comment) (D.Definition def'))
@@ -96,17 +97,17 @@ defHelp comment (A.A region def) decls =
             let def' = Valid.Definition pat expr' Nothing
             addRest def' decls
 
-    Source.TypeAnnotation name tipe ->
+    Source.TypeAnnotation var tipe ->
         case decls of
           D.Decl (A.A _ (D.Definition (A.A _
-            (Source.Definition pat@(A.A _ (Pattern.Var name')) expr)))) : rest
-              | name == name' ->
+            (Source.Definition pat@(A.A _ (Pattern.Var var')) expr)))) : rest
+              | var == var' ->
                   do  expr' <- Validate.expression expr
                       let def' = Valid.Definition pat expr' (Just tipe)
                       addRest def' rest
 
-          _ ->
-              Result.throw region (Error.TypeWithoutDefinition name)
+          _ -> 
+              Result.throw region (Error.TypeWithoutDefinition $ Var.rawName var)
 
 
 -- VALIDATE PORTS IN DECLARATIONS
@@ -159,16 +160,16 @@ definitionsHelp sourceDefs =
             let def = Valid.Definition pat expr' Nothing
             (:) def <$> definitionsHelp rest
 
-    A.A region (Source.TypeAnnotation name tipe) : rest ->
+    A.A region (Source.TypeAnnotation var tipe) : rest ->
         case rest of
-          A.A _ (Source.Definition pat@(A.A _ (Pattern.Var name')) expr) : rest'
-              | name == name' ->
+          A.A _ (Source.Definition pat@(A.A _ (Pattern.Var var')) expr) : rest'
+              | var == var' ->
                   do  expr' <- expression expr
                       let def = Valid.Definition pat expr' (Just tipe)
                       (:) def <$> definitionsHelp rest'
 
           _ ->
-              Result.throw region (Error.TypeWithoutDefinition name)
+              Result.throw region (Error.TypeWithoutDefinition $ Var.rawName var)
 
 
 -- VALIDATE EXPRESSIONS
@@ -304,7 +305,7 @@ defDuplicates
     :: [Pattern.RawPattern]
     -> Result.Result wrn Error.Error ()
 defDuplicates patterns =
-  concatMap Pattern.boundVars patterns
+  concatMap (map (A.map Var.rawName) . Pattern.boundVars) patterns
     |> detectDuplicates Error.DuplicateDefinition
 
 
@@ -321,7 +322,7 @@ extractValues :: D.ValidDecl -> ([A.Located String], [A.Located String])
 extractValues (A.A (region, _) decl) =
   case decl of
     D.Definition (Valid.Definition pattern _ _) ->
-        ( Pattern.boundVars pattern
+        ( map (A.map Var.rawName) $ Pattern.boundVars pattern
         , []
         )
 

@@ -44,6 +44,9 @@ fromModule home name =
     Canonical (Module home) name
 
 
+rawName :: Raw -> String
+rawName (Raw name) = name
+
 -- VARIABLE RECOGNIZERS
 
 is :: [String] -> String -> Canonical -> Bool

@@ -301,7 +301,7 @@ declToPatches moduleName (A.A (region,_) decl) =
   case decl of
     D.Definition (Valid.Definition pattern _ _) ->
         ( Nothing
-        , map (local Env.Value) (P.boundVarList pattern)
+        , map (local Env.Value) (map Var.rawName $ P.boundVarList pattern)
         )
 
     D.Datatype name _ ctors ->

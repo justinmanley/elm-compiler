@@ -36,10 +36,10 @@ fromPatches moduleName patches =
       (Env moduleName Map.empty Map.empty Map.empty Map.empty)
 
 
-addPattern :: P.Pattern ann var -> Environment -> Environment
+--addPattern :: P.Pattern ann var -> Environment -> Environment
 addPattern pattern env =
   let patches =
-        map (\x -> Value x (Var.local x)) (P.boundVarList pattern)
+        map (\x -> Value x (Var.local x)) (map Var.rawName $ P.boundVarList pattern)
   in
       addPatches patches env
 

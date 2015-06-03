@@ -35,7 +35,7 @@ basic =
               P.Data (Var.Raw str) []
 
           _ ->
-              P.Var str
+              P.Var (Var.Raw str)
 
 
 asPattern :: IParser P.RawPattern -> IParser P.RawPattern
@@ -49,7 +49,7 @@ asPattern patternParser =
       case maybeAlias of
         Just alias ->
             do  end <- getMyPosition
-                return (A.at start end (P.Alias alias pattern))
+                return $ A.at start end (P.Alias (Var.Raw alias) pattern)
 
         Nothing ->
             return pattern
@@ -63,7 +63,7 @@ asPattern patternParser =
 record :: IParser P.RawPattern
 record =
   addLocation
-    (P.Record <$> brackets (commaSep1 lowVar))
+    (P.Record <$> brackets (fmap (map Var.Raw) $ commaSep1 lowVar))
 
 
 tuple :: IParser P.RawPattern

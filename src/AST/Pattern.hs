@@ -18,9 +18,9 @@ type Pattern ann var =
 
 data Pattern' ann var
     = Data var [Pattern ann var]
-    | Record [String]
-    | Alias String (Pattern ann var)
-    | Var String
+    | Record [var]
+    | Alias var (Pattern ann var)
+    | Var var
     | Anything
     | Literal L.Literal
     deriving (Show)
@@ -37,6 +37,9 @@ type RawPattern' =
 type CanonicalPattern =
     Pattern R.Region Var.Canonical
 
+
+localVar :: String -> Pattern' ann Var.Canonical
+localVar = Var . Var.local 
 
 list :: R.Position -> [RawPattern] -> RawPattern
 list end patterns =
@@ -61,9 +64,12 @@ tuple patterns =
   Data (Var.Raw ("_Tuple" ++ show (length patterns))) patterns
 
 
+rawVar :: String -> RawPattern'
+rawVar name = Var $ Var.Raw name
+
 -- FIND VARIABLES
 
-boundVars :: Pattern ann var -> [A.Annotated ann String]
+--boundVars :: Pattern ann var -> [A.Annotated ann String]
 boundVars (A.A ann pattern) =
   case pattern of
     Var x ->
@@ -85,17 +91,17 @@ boundVars (A.A ann pattern) =
         []
 
 
-member :: String -> Pattern ann var -> Bool
+--member :: String -> Pattern ann var -> Bool
 member name pattern =
   any (name==) (map A.drop (boundVars pattern))
 
 
-boundVarSet :: Pattern ann var -> Set.Set String
+--boundVarSet :: Pattern ann var -> Set.Set String
 boundVarSet pattern =
   Set.fromList (map A.drop (boundVars pattern))
 
 
-boundVarList :: Pattern ann var -> [String]
+--boundVarList :: Pattern ann var -> [String]
 boundVarList pattern =
   Set.toList (boundVarSet pattern)
 
@@ -105,18 +111,18 @@ boundVarList pattern =
 instance Var.ToString var => P.Pretty (Pattern' ann var) where
   pretty dealiaser needsParens pattern =
     case pattern of
-      Var name ->
-          P.text name
+      Var var ->
+          P.text $ Var.toString var
 
       Literal literal ->
           P.pretty dealiaser needsParens literal
 
       Record fields ->
-          P.braces (P.commaCat (map P.text fields))
+          P.braces (P.commaCat (map (P.text . Var.toString) fields))
 
       Alias x ptrn ->
           P.parensIf needsParens $
-              P.pretty dealiaser True ptrn <+> P.text "as" <+> P.text x
+              P.pretty dealiaser True ptrn <+> P.text "as" <+> (P.text $ Var.toString x)
 
       Anything ->
           P.text "_"

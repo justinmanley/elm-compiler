@@ -36,7 +36,7 @@ constrain env (A.A region pattern) tipe =
         do  c <- Literal.constrain env region lit tipe
             return $ emptyFragment { typeConstraint = c }
 
-    P.Var name ->
+    P.Var (V.Canonical _ name) ->
         do  v <- variable Flexible
             return $ Fragment
                 { typeEnv = Map.singleton name (rvar v)
@@ -44,7 +44,7 @@ constrain env (A.A region pattern) tipe =
                 , typeConstraint = varN v === tipe
                 }
 
-    P.Alias name p ->
+    P.Alias (V.Canonical _ name) p ->
         do  v <- variable Flexible
             fragment <- constrain env p tipe
             return $ fragment
@@ -65,7 +65,7 @@ constrain env (A.A region pattern) tipe =
                 }
 
     P.Record fields ->
-        do  pairs <- mapM (\name -> (,) name <$> variable Flexible) fields
+        do  pairs <- mapM (\(V.Canonical _ name) -> (,) name <$> variable Flexible) fields
             let tenv = Map.fromList (map (second rvar) pairs)
             c <- exists $ \t -> return (tipe === record (Map.map (\v -> [A.drop v]) tenv) t)
             return $ Fragment

@@ -244,7 +244,7 @@ declToValue :: D.ValidDecl -> [Var.Value]
 declToValue (A.A _ decl) =
     case decl of
       D.Definition (Valid.Definition pattern _ _) ->
-          map Var.Value (P.boundVarList pattern)
+          map Var.Value (map Var.rawName $ P.boundVarList pattern)
 
       D.Datatype name _tvs ctors ->
           [ Var.Union name (Var.Listing (map fst ctors) False) ]
@@ -422,6 +422,9 @@ expression env (A.A region validExpr) =
           Result.ok (GLShader uid src tipe)
 
 
+toLocal :: Var.Raw -> Var.Canonical
+toLocal (Var.Raw name) = Var.local name
+
 pattern
     :: Env.Environment
     -> P.RawPattern
@@ -430,19 +433,19 @@ pattern env (A.A region ptrn) =
   A.A region <$>
     case ptrn of
       P.Var x ->
-          Result.ok (P.Var x)
+          Result.ok (P.Var $ toLocal x)
 
       P.Literal lit ->
           Result.ok (P.Literal lit)
 
       P.Record fields ->
-          Result.ok (P.Record fields)
+          Result.ok (P.Record $ map toLocal fields)
 
       P.Anything ->
           Result.ok P.Anything
 
       P.Alias x p ->
-          P.Alias x <$> pattern env p
+          P.Alias (toLocal x) <$> pattern env p
 
       P.Data (Var.Raw name) patterns ->
           P.Data

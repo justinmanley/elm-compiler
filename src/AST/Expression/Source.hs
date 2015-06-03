@@ -27,5 +27,5 @@ type Def =
 
 data Def'
     = Definition Pattern.RawPattern Expr
-    | TypeAnnotation String Type.Raw
+    | TypeAnnotation Var.Raw Type.Raw
     deriving (Show)

@@ -89,14 +89,14 @@ infiniteArgs =
   map (:[]) ['a'..'z'] ++ map (\n -> "_" ++ show (n :: Int)) [1..]
 
 
-buildFunction :: Canonical.Expr -> [String] -> Canonical.Expr
+--buildFunction :: Canonical.Expr -> [String] -> Canonical.Expr
 buildFunction body@(A.A ann _) vars =
   foldr
       (\pattern expr -> A.A ann (E.Lambda pattern expr))
       body
-      (map (A.A ann . P.Var) vars)
+      (map (A.A ann . P.localVar) vars)
 
 
-definition :: String -> Canonical.Expr -> R.Region -> T.Canonical -> Canonical.Def
+--definition :: String -> Canonical.Expr -> R.Region -> T.Canonical -> Canonical.Def
 definition name expr@(A.A ann _) region tipe =
-  Canonical.Definition (A.A ann (P.Var name)) expr (Just (A.A region tipe))
+  Canonical.Definition (A.A ann (P.localVar name)) expr (Just (A.A region tipe))

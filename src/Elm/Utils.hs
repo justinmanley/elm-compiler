@@ -19,6 +19,7 @@ import System.Process (readProcessWithExitCode)
 
 import qualified AST.Expression.Source as Source
 import qualified AST.Pattern as Pattern
+import qualified AST.Variable as Var
 import qualified Elm.Compiler.Version as Version
 import qualified Parse.Helpers as Parse
 import qualified Parse.Expression as Parse
@@ -134,12 +135,14 @@ errorNotFound name =
 
 
 -- DECL CHECKER
+-- Used by the Elm REPL.
 
 isDeclaration :: String -> Maybe String
 isDeclaration string =
   case Parse.iParse Parse.definition string of
     Right (A.A _ (Source.Definition pattern _)) ->
-        Just (List.intercalate "$" (Pattern.boundVarList pattern))
+        let boundVars = (map (\(Var.Raw name) -> name)) . Pattern.boundVarList 
+        in Just (List.intercalate "$" (boundVars pattern))
 
     _ ->
         Nothing

@@ -49,7 +49,7 @@ accessor =
 
       return $
         E.Lambda
-            (ann (P.Var "_"))
+            (ann (P.rawVar "_"))
             (ann (E.Access (ann (E.rawVar "_")) lbl))
 
 
@@ -97,7 +97,7 @@ parensTerm =
     ]
   where
     lambda start end x body =
-        A.at start end (E.Lambda (A.at start end (P.Var x)) body)
+        A.at start end (E.Lambda (A.at start end (P.rawVar x)) body)
 
     var start end x =
         A.at start end (E.rawVar x)
@@ -320,7 +320,7 @@ typeAnnotation =
     start =
       do  v <- lowVar <|> parens symOp
           padded hasType
-          return v
+          return $ Var.Raw v
 
 
 -- DEFINITION
@@ -345,7 +345,7 @@ defStart =
     choice
       [ do  pattern <- try Pattern.term
             infics pattern <|> func pattern
-      , do  opPattern <- addLocation (P.Var <$> parens symOp)
+      , do  opPattern <- addLocation (P.rawVar <$> parens symOp)
             func opPattern
       ]
       <?> "the definition of a variable (x = ...)"
@@ -363,4 +363,4 @@ defStart =
           p2 <- (whitespace >> Pattern.term)
           let opName =
                 if o == '`' then takeWhile (/='`') p else o:p
-          return [ A.at start end (P.Var opName), p1, p2 ]
+          return [ A.at start end (P.rawVar opName), p1, p2 ]

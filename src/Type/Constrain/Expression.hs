@@ -385,7 +385,7 @@ expandPattern def@(Canonical.Definition lpattern expr maybeType) =
     _ ->
         mainDef : map toDef vars
       where
-        vars = P.boundVarList lpattern
+        vars = map V.name $ P.boundVarList lpattern
 
         combinedName = "$" ++ concat vars
 
@@ -395,13 +395,13 @@ expandPattern def@(Canonical.Definition lpattern expr maybeType) =
         localVar name =
             A.A patternRegion (E.localVar name)
 
-        mainDef = Canonical.Definition (pvar combinedName) expr maybeType
+        mainDef = Canonical.Definition (pvar $ V.local combinedName) expr maybeType
 
         toDef name =
             let extract =
                   E.Case (localVar combinedName) [(lpattern, localVar name)]
             in
-                Canonical.Definition (pvar name) (A.A patternRegion extract) Nothing
+                Canonical.Definition (pvar $ V.local name) (A.A patternRegion extract) Nothing
 
 
 -- CONSTRAIN DEFINITIONS
@@ -421,10 +421,10 @@ constrainDef env info (Canonical.Definition (A.A patternRegion pattern) expr may
   let qs = [] -- should come from the def, but I'm not sure what would live there...
   in
   case (pattern, maybeTipe) of
-    (P.Var name, Just (A.A typeRegion tipe)) ->
+    (P.Var (V.Canonical _ name), Just (A.A typeRegion tipe)) ->
         constrainAnnotatedDef env info qs patternRegion typeRegion name expr tipe
 
-    (P.Var name, Nothing) ->
+    (P.Var (V.Canonical _ name), Nothing) ->
         constrainUnannotatedDef env info qs patternRegion name expr
 
     _ -> error ("problem in constrainDef with " ++ show pattern)

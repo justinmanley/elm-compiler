@@ -129,13 +129,13 @@ expression (A.A region expr) =
             depattern (args, body) pattern =
                 case pattern of
                   A.A _ (P.Var x) ->
-                      return (args ++ [ Var.varName x ], body)
+                      return (args ++ [ Var.varName . Var.name $ x ], body)
 
                   _ ->
                       do  arg <- Case.newVar
                           return
-                            ( args ++ [arg]
-                            , A.A ann (Case (A.A ann (localVar arg)) [(pattern, body)])
+                            ( args ++ [Var.name $ arg]
+                            , A.A ann (Case (A.A ann (Var arg)) [(pattern, body)])
                             )
 
             (patterns, innerBody) =
@@ -187,11 +187,13 @@ expression (A.A region expr) =
           do  (tempVar,initialMatch) <- Case.toMatch cases
               (revisedMatch, stmt) <-
                   case e of
-                    A.A _ (Var (Var.Canonical Var.Local x)) ->
-                        return (Case.matchSubst [(tempVar, Var.varName x)] initialMatch, [])
+                    A.A _ (Var var) ->
+                        return (Case.matchSubst [(tempVar, var)] initialMatch, [])
                     _ ->
                         do  e' <- expression e
-                            return (initialMatch, [VarDeclStmt () [varDecl tempVar e']])
+                            return (initialMatch
+                                , [VarDeclStmt () [varDecl (Var.name tempVar) e']])
+
               match' <- match region revisedMatch
               return (function [] (stmt ++ match') `call` [])
 
@@ -230,7 +232,7 @@ definition (Canonical.Definition annPattern expr@(A.A region _) _) =
       let assign x = varDecl x expr'
       let (A.A patternRegion pattern) = annPattern
       case pattern of
-        P.Var x
+        P.Var (Var.Canonical _ x)
             | Help.isOp x ->
                 let op = LBracket () (ref "_op") (string x) in
                 return [ ExprStmt () $ AssignExpr () OpAssign op expr' ]
@@ -239,7 +241,7 @@ definition (Canonical.Definition annPattern expr@(A.A region _) _) =
                 return [ VarDeclStmt () [ assign (Var.varName x) ] ]
 
         P.Record fields ->
-            let setField f = varDecl f (obj ["$",f]) in
+            let setField (Var.Canonical _ f) = varDecl f (obj ["$",f]) in
             return [ VarDeclStmt () (assign "$" : map setField fields) ]
 
         P.Data (Var.Canonical _ name) patterns | vars /= Nothing ->
@@ -248,7 +250,7 @@ definition (Canonical.Definition annPattern expr@(A.A region _) _) =
             vars = getVars patterns
             getVars patterns =
                 case patterns of
-                  A.A _ (P.Var x) : rest ->
+                  A.A _ (P.Var (Var.Canonical _ x)) : rest ->
                       (Var.varName x :) `fmap` getVars rest
                   [] ->
                       Just []
@@ -268,11 +270,11 @@ definition (Canonical.Definition annPattern expr@(A.A region _) _) =
             do  defs' <- concat <$> mapM toDef vars
                 return (VarDeclStmt () [assign "_"] : defs')
             where
-              vars = P.boundVarList annPattern
+              vars = map Var.name $ P.boundVarList annPattern
               mkVar = A.A region . localVar
               toDef y =
                 let expr = A.A region $ Case (mkVar "_") [(annPattern, mkVar y)]
-                    pat = A.A patternRegion (P.Var y)
+                    pat = A.A patternRegion (P.localVar y)
                 in
                     definition (Canonical.Definition pat expr Nothing)
 
@@ -280,7 +282,7 @@ definition (Canonical.Definition annPattern expr@(A.A region _) _) =
 match :: R.Region -> Case.Match -> State Int [Statement ()]
 match region mtch =
   case mtch of
-    Case.Match name clauses mtch' ->
+    Case.Match (Var.Canonical _ name) clauses mtch' ->
         do  (isChars, clauses') <- unzip <$> mapM (clause region name) clauses
             mtch'' <- match region mtch'
             return (SwitchStmt () (format isChars (access name)) clauses' : mtch'')
@@ -323,7 +325,7 @@ clause region variable (Case.Clause value vars mtch) =
     (,) isChar . CaseClause () pattern <$> match region (Case.matchSubst (zip vars vars') mtch)
   where
     vars' =
-        map (\n -> variable ++ "._" ++ show n) [0..]
+        map (\n -> Var.local $ variable ++ "._" ++ show n) [0..]
 
     (isChar, pattern) =
         case value of

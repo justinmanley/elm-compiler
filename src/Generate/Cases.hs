@@ -19,7 +19,7 @@ import qualified Reporting.Annotation as A
 -- MATCHES
 
 data Match
-    = Match String [Clause] Match
+    = Match Var.Canonical [Clause] Match
     | Break
     | Fail
     | Other Canonical.Expr
@@ -28,7 +28,7 @@ data Match
 
 
 data Clause =
-    Clause (Either Var.Canonical Literal.Literal) [String] Match
+    Clause (Either Var.Canonical Literal.Literal) [Var.Canonical] Match
     deriving Show
 
 
@@ -38,20 +38,20 @@ type Branch =
 
 -- PUBLIC FUNCTIONS
 
-toMatch :: [(P.CanonicalPattern, Canonical.Expr)] -> State Int (String, Match)
+--toMatch :: [(P.CanonicalPattern, Canonical.Expr)] -> State Int (String, Match)
 toMatch patterns =
   do  v <- newVar
       (,) v <$> buildMatch [v] (map (first (:[])) patterns) Fail
 
 
-newVar :: State Int String
+--newVar :: State Int String
 newVar =
   do  n <- State.get
       State.modify (+1)
-      return $ "_v" ++ show n
+      return $ Var.local ("_v" ++ show n)
 
 
-matchSubst :: [(String,String)] -> Match -> Match
+--matchSubst :: [(String,String)] -> Match -> Match
 matchSubst pairs match =
   case match of
     Break -> Break
@@ -62,7 +62,8 @@ matchSubst pairs match =
         Seq (map (matchSubst pairs) ms)
 
     Other (A.A a e) ->
-        Other . A.A a $ foldr ($) e $ map (\(x,y) -> S.subst x (Expr.localVar y)) pairs
+        let substPair (x,y) = S.subst x (Expr.Var y)
+        in Other . A.A a $ foldr ($) e $ map substPair pairs
 
     Match n cs m ->
         Match (varSubst n) (map clauseSubst cs) (matchSubst pairs m)
@@ -74,7 +75,7 @@ matchSubst pairs match =
 
 -- BUILD MATCHES
 
-buildMatch :: [String] -> [Branch] -> Match -> State Int Match
+--buildMatch :: [String] -> [Branch] -> Match -> State Int Match
 buildMatch variables branches match =
     case (variables, branches, match) of
       ([], [], _) ->
@@ -97,13 +98,13 @@ buildMatch variables branches match =
             branches' = map (dealias var) branches
 
 
-dealias :: String -> Branch -> Branch
+--dealias :: String -> Branch -> Branch
 dealias _ ([], _) = noMatch "dealias"
 dealias var branch@(p:ps, A.A ann e) =
     case p of
       A.A _ (P.Alias alias pattern) ->
           ( pattern:ps
-          , A.A ann (S.subst alias (Expr.localVar var) e)
+          , A.A ann (S.subst alias (Expr.Var var) e)
           )
 
       _ ->
@@ -126,7 +127,7 @@ isVar p =
 
 -- VARIABLE MATCHES
 
-matchVar :: [String] -> [Branch] -> Match -> State Int Match
+--matchVar :: [String] -> [Branch] -> Match -> State Int Match
 matchVar [] _ _ = noMatch "matchVar"
 matchVar (var:vars) branches match =
     buildMatch vars (map subVar branches) match
@@ -143,10 +144,10 @@ matchVar (var:vars) branches match =
                   expr
 
               P.Var x ->
-                  S.subst x (Expr.localVar var) expr
+                  S.subst x (Expr.Var var) expr
 
               P.Record fields ->
-                  let access = Expr.Access (A.A ann (Expr.localVar var))
+                  let access = Expr.Access (A.A ann $ Expr.Var var) . Var.name
                   in
                       foldr (\x -> S.subst x (access x)) expr fields
 
@@ -156,7 +157,7 @@ matchVar (var:vars) branches match =
 
 -- CONSTRUCTOR MATCHES
 
-matchCon :: [String] -> [Branch] -> Match -> State Int Match
+--matchCon :: [String] -> [Branch] -> Match -> State Int Match
 matchCon variables branches match =
     case variables of
       [] -> noMatch "matchCon"
@@ -180,12 +181,12 @@ matchCon variables branches match =
                 _ -> noMatch "matchCon"
 
 
-matchClause
-    :: Either Var.Canonical Literal.Literal
-    -> [String]
-    -> [Branch]
-    -> Match
-    -> State Int Clause
+--matchClause
+--    :: Either Var.Canonical Literal.Literal
+--    -> [String]
+--    -> [Branch]
+--    -> Match
+--    -> State Int Clause
 matchClause _ [] _ _ = noMatch "matchClause"
 matchClause c (_:vs) branches match =
   do  vs' <- getVars
@@ -203,7 +204,7 @@ matchClause c (_:vs) branches match =
           _ ->
               noMatch "matchClause.flatten"
 
-    getVars :: State Int [String]
+    --getVars :: State Int [String]
     getVars =
         case head branches of
           (A.A _ (P.Data _ argPatterns) : _, _) ->
@@ -248,7 +249,7 @@ branchCmp _ _ = noMatch "matchCon.branchCmp"
 
 -- MIX MATCHES
 
-matchMix :: [String] -> [Branch] -> Match -> State Int Match
+--matchMix :: [String] -> [Branch] -> Match -> State Int Match
 matchMix vs branches def =
     State.foldM (flip $ buildMatch vs) def (reverse branchGroups)
   where
