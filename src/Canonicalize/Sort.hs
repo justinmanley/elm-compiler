@@ -14,7 +14,7 @@ import qualified AST.Pattern as P
 import qualified AST.Variable as V
 import qualified Reporting.Annotation as A
 
-type VarSet = Set.Set V.Canonical
+type VarSet = Set.Set V.CanonicalLocal
 
 -- STARTING POINT
 
@@ -23,13 +23,13 @@ definitions expression =
   evalState (reorder expression) Set.empty
 
 
---free :: String -> State (VarSet) ()
+free :: V.CanonicalLocal -> State VarSet ()
 free x =
   modify (Set.insert x)
 
 
-freeIfLocal :: V.Canonical -> State VarSet ()
-freeIfLocal var@(V.Canonical home name) =
+freeIfLocal :: V.CanonicalLocal -> State VarSet ()
+freeIfLocal var@(V.Canonical home _) =
   case home of
     V.Local -> free var
     V.BuiltIn -> return ()
@@ -58,7 +58,7 @@ reorder (A.A ann expression) =
           Case <$> reorder expr <*> mapM bindingReorder cases
 
       Data name exprs ->
-          do  free $ V.local name -- TODO: Is this correct? Is name a local var?
+          do  free $ V.local name -- TODO: Is this correct? Is `name` a local var??
               Data name <$> mapM reorder exprs
 
       -- Just pipe the reorder though
@@ -132,7 +132,7 @@ reorder (A.A ann expression) =
               return let'
 
 
---ctors :: P.CanonicalPattern -> [String]
+ctors :: P.CanonicalPattern -> [V.CanonicalLocal]
 ctors (A.A _ pattern) =
     case pattern of
       P.Var _ ->
@@ -153,7 +153,7 @@ ctors (A.A _ pattern) =
       P.Data cons ps -> cons : concatMap ctors ps
 
 
---bound :: P.CanonicalPattern -> State (VarSet) ()
+bound :: P.CanonicalPattern -> State VarSet ()
 bound pattern =
   let boundVars = P.boundVarSet pattern
   in
@@ -180,19 +180,19 @@ buildDefGraph defs =
   do  pdefsDeps <- mapM reorderAndGetDependencies defs
       return $ realDeps (addKey pdefsDeps)
   where
-    --addKey :: [(Canonical.Def, [String])] -> [(Canonical.Def, Int, [String])]
+    addKey :: [(Canonical.Def, [V.CanonicalLocal])] -> [(Canonical.Def, Int, [V.CanonicalLocal])]
     addKey =
         zipWith (\n (pdef,deps) -> (pdef,n,deps)) [0..]
 
-    --variableToKey :: (Canonical.Def, Int, [String]) -> [(String, Int)]
+    variableToKey :: (Canonical.Def, Int, [V.CanonicalLocal]) -> [(V.CanonicalLocal, Int)]
     variableToKey (Canonical.Definition pattern _ _, key, _) =
         [ (var, key) | var <- P.boundVarList pattern ]
 
-    --variableToKeyMap :: [(Canonical.Def, Int, [String])] -> Map.Map String Int
+    variableToKeyMap :: [(Canonical.Def, Int, [V.CanonicalLocal])] -> Map.Map V.CanonicalLocal Int
     variableToKeyMap pdefsDeps =
         Map.fromList (concatMap variableToKey pdefsDeps)
 
-    --realDeps :: [(Canonical.Def, Int, [String])] -> [(Canonical.Def, Int, [Int])]
+    realDeps :: [(Canonical.Def, Int, [V.CanonicalLocal])] -> [(Canonical.Def, Int, [Int])]
     realDeps pdefsDeps =
         map convert pdefsDeps
       where
@@ -201,9 +201,9 @@ buildDefGraph defs =
             (pdef, key, Maybe.mapMaybe (flip Map.lookup varDict) deps)
 
 
---reorderAndGetDependencies
---    :: Canonical.Def
---    -> State VarSet (Canonical.Def, [String])
+reorderAndGetDependencies
+    :: Canonical.Def
+    -> State VarSet (Canonical.Def, [V.CanonicalLocal])
 reorderAndGetDependencies (Canonical.Definition pattern expr mType) =
   do  globalFrees <- get
       -- work in a fresh environment

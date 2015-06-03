@@ -2,7 +2,11 @@ module Generate.JavaScript.Helpers where
 
 import Language.ECMAScript3.Syntax
 
+import qualified AST.Variable as Var
 import qualified Reporting.Region as R
+
+
+type Var = Var.Canonical
 
 
 localRuntime :: String

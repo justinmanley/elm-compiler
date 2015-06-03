@@ -30,6 +30,8 @@ data Canonical = Canonical
     }
     deriving (Eq, Ord, Show)
 
+-- | The type of variables which are known to be local after canonicalization.
+type CanonicalLocal = Canonical
 
 local :: String -> Canonical
 local x = Canonical Local x

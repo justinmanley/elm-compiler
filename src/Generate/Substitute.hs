@@ -11,7 +11,7 @@ import Elm.Utils ((|>))
 import qualified Reporting.Annotation as A
 
 
---subst :: String -> Canonical.Expr' -> Canonical.Expr' -> Canonical.Expr'
+subst :: V.CanonicalLocal -> Canonical.Expr' -> Canonical.Expr' -> Canonical.Expr'
 subst old new expression =
     let f (A.A a e) = A.A a (subst old new e) in
     case expression of
@@ -49,7 +49,7 @@ subst old new expression =
 
       Var var -> 
           case var of 
-            V.Canonical V.Local name -> 
+            V.Canonical V.Local _ -> 
                 if var == old then new else expression
 
             _ -> expression

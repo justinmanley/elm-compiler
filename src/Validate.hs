@@ -81,11 +81,11 @@ validateDeclsHelp comment (A.A region decl) decls =
 
 -- VALIDATE DEFINITIONS IN DECLARATIONS
 
---defHelp
---    :: Maybe String
---    -> Source.Def
---    -> [D.SourceDecl]
---    -> Result.Result wrn Error.Error [D.ValidDecl]
+defHelp
+    :: Maybe String
+    -> Source.Def
+    -> [D.SourceDecl]
+    -> Result.Result wrn Error.Error [D.ValidDecl]
 defHelp comment (A.A region def) decls =
   let addRest def' rest =
         (:) (A.A (region, comment) (D.Definition def'))

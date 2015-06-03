@@ -69,7 +69,7 @@ rawVar name = Var $ Var.Raw name
 
 -- FIND VARIABLES
 
---boundVars :: Pattern ann var -> [A.Annotated ann String]
+boundVars :: Pattern ann var -> [A.Annotated ann var]
 boundVars (A.A ann pattern) =
   case pattern of
     Var x ->
@@ -91,17 +91,17 @@ boundVars (A.A ann pattern) =
         []
 
 
---member :: String -> Pattern ann var -> Bool
+member :: Eq var => var -> Pattern ann var -> Bool
 member name pattern =
   any (name==) (map A.drop (boundVars pattern))
 
 
---boundVarSet :: Pattern ann var -> Set.Set String
+boundVarSet :: Ord var => Pattern ann var -> Set.Set var
 boundVarSet pattern =
   Set.fromList (map A.drop (boundVars pattern))
 
 
---boundVarList :: Pattern ann var -> [String]
+boundVarList :: Ord var => Pattern ann var -> [var]
 boundVarList pattern =
   Set.toList (boundVarSet pattern)
 
