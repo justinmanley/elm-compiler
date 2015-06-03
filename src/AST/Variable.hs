@@ -114,6 +114,13 @@ class ToString a where
   toString :: a -> String
 
 
+instance ToString Char where
+  toString char = [char]
+
+
+instance ToString a => ToString [a] where
+  toString = concatMap toString  
+
 instance ToString Raw where
   toString (Raw name) =
       name

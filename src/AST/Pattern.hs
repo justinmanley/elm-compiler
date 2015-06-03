@@ -12,30 +12,30 @@ import qualified Reporting.PrettyPrint as P
 import qualified Reporting.Region as R
 
 
-type Pattern ann var =
-    A.Annotated ann (Pattern' ann var)
+type Pattern ann var local =
+    A.Annotated ann (Pattern' ann var local)
 
 
-data Pattern' ann var
-    = Data var [Pattern ann var]
-    | Record [String]
-    | Alias String (Pattern ann var)
-    | Var String
+data Pattern' ann var local
+    = Data var [Pattern ann var local]
+    | Record [local]
+    | Alias local (Pattern ann var local)
+    | Var local
     | Anything
     | Literal L.Literal
     deriving (Show)
 
 
 type RawPattern =
-    Pattern R.Region Var.Raw
+    Pattern R.Region Var.Raw String
 
 
 type RawPattern' =
-    Pattern' R.Region Var.Raw
+    Pattern' R.Region Var.Raw String
 
 
 type CanonicalPattern =
-    Pattern R.Region Var.Canonical
+    Pattern R.Region Var.Canonical String
 
 
 list :: R.Position -> [RawPattern] -> RawPattern
@@ -63,7 +63,7 @@ tuple patterns =
 
 -- FIND VARIABLES
 
-boundVars :: Pattern ann var -> [A.Annotated ann String]
+boundVars :: Pattern ann var String -> [A.Annotated ann String]
 boundVars (A.A ann pattern) =
   case pattern of
     Var x ->
@@ -85,38 +85,38 @@ boundVars (A.A ann pattern) =
         []
 
 
-member :: String -> Pattern ann var -> Bool
+member :: String -> Pattern ann var String -> Bool
 member name pattern =
   any (name==) (map A.drop (boundVars pattern))
 
 
-boundVarSet :: Pattern ann var -> Set.Set String
+boundVarSet :: Pattern ann var String -> Set.Set String
 boundVarSet pattern =
   Set.fromList (map A.drop (boundVars pattern))
 
 
-boundVarList :: Pattern ann var -> [String]
+boundVarList :: Pattern ann var String -> [String]
 boundVarList pattern =
   Set.toList (boundVarSet pattern)
 
 
 -- PRETTY PRINTING
 
-instance Var.ToString var => P.Pretty (Pattern' ann var) where
+instance (Var.ToString var, Var.ToString local) => P.Pretty (Pattern' ann var local) where
   pretty dealiaser needsParens pattern =
     case pattern of
       Var name ->
-          P.text name
+          P.text $ Var.toString name
 
       Literal literal ->
           P.pretty dealiaser needsParens literal
 
       Record fields ->
-          P.braces (P.commaCat (map P.text fields))
+          P.braces (P.commaCat (map (P.text . Var.toString) fields))
 
       Alias x ptrn ->
           P.parensIf needsParens $
-              P.pretty dealiaser True ptrn <+> P.text "as" <+> P.text x
+              P.pretty dealiaser True ptrn <+> P.text "as" <+> P.text (Var.toString x)
 
       Anything ->
           P.text "_"

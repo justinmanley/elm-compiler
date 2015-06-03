@@ -110,7 +110,7 @@ dealias var branch@(p:ps, A.A ann e) =
           branch
 
 
-isCon :: ([P.Pattern ann var], expr) -> Bool
+isCon :: ([P.Pattern ann var local], expr) -> Bool
 isCon ([], _) = noMatch "isCon"
 isCon (A.A _ pattern : _, _) =
     case pattern of
@@ -119,7 +119,7 @@ isCon (A.A _ pattern : _, _) =
       _ -> False
 
 
-isVar :: ([P.Pattern ann var], expr) -> Bool
+isVar :: ([P.Pattern ann var local], expr) -> Bool
 isVar p =
     not (isCon p)
 
