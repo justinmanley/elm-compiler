@@ -48,16 +48,14 @@ tceExpr sccs var expr@(A ann expr') = case expr' of
     E.Literal lit -> done expr
  
     E.Var (Var.Analyzed _ var') ->
-        let sameSCC var var' = isJust $ find (== var') <$> find (elem var) sccs
-        in
-            if var `sameSCC` var'
-            then continue expr
-            else done expr 
+        if sameSCC sccs var var'
+        then continue expr
+        else done expr 
 
     E.Range lowExpr highExpr -> undefined
      
     E.ExplicitList exprs -> 
-        if all noDependencies exprs
+        if all (noDependencies sccs var) exprs
         then done expr
         else continue expr
 
@@ -65,12 +63,12 @@ tceExpr sccs var expr@(A ann expr') = case expr' of
         undefined
 
     E.Lambda pat bodyExpr -> 
-        if noDependencies bodyExpr
+        if noDependencies sccs var $ bodyExpr
         then done expr
         else continue expr
 
     E.App appExpr argExpr -> 
-        if noDependencies appExpr && noDependencies argExpr
+        if (noDependencies sccs var) appExpr && (noDependencies sccs var) argExpr
         then done expr
         else continue expr
 
@@ -80,7 +78,7 @@ tceExpr sccs var expr@(A ann expr') = case expr' of
 
     E.Let defs bodyExpr -> A ann $ 
         (E.Let (map (tceDef sccs) defs) $ 
-            if noDependencies bodyExpr
+            if noDependencies sccs var $ bodyExpr
             then done expr
             else continue expr)
 
@@ -90,7 +88,7 @@ tceExpr sccs var expr@(A ann expr') = case expr' of
         in A ann $ E.Case (tceExpr sccs var targetExpr) (map tceCase cases)
 
     E.Data _ exprs ->
-        if all noDependencies exprs
+        if all (noDependencies sccs var) exprs
         then done expr
         else continue expr
 
@@ -122,6 +120,13 @@ continue (A ann expr) = A ann $
 done :: Analyzed.Expr ann -> Analyzed.Expr ann 
 done (A ann expr) = A ann $ E.Data "Done" [A ann expr]
 
-noDependencies = undefined
+sameSCC :: [StronglyConnComp] -> Var.VarId -> Var.VarId -> Bool
+sameSCC sccs var var' = isJust $ find (== var') <$> find (elem var) sccs
 
-tcePat = undefined 
+noDependencies :: [StronglyConnComp] -> Var.VarId -> Analyzed.Expr ann -> Bool
+noDependencies sccs var expr = all (not . sameSCC sccs var) $ 
+    (map Var.varId . Analyzed.variables) expr  
+
+-- | TODO: Need to introduce a new name if tail recursion is to be used.
+tcePat :: [StronglyConnComp] -> Pat.AnalyzedPattern ann -> Pat.AnalyzedPattern ann
+tcePat sccs pat = pat  
