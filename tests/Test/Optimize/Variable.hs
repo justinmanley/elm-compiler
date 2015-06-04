@@ -31,7 +31,7 @@ idsAreUnique :: Module.CanonicalModule -> Assertion
 idsAreUnique modul = either failure success $ foldr isUnique (Right Map.empty) vars where
     failure msg = assertFailure $ unlines [ msg, prettyExpr . Var.uniquify $ modul ]
     success _ = assertBool "" True
-    vars = variables . Module.program . Module.body . Var.uniquify $ modul
+    vars = Analyzed.variables . Module.program . Module.body . Var.uniquify $ modul
 
 isUnique :: Var.Analyzed 
     -> Either String (Map.Map Int Var.Canonical)
@@ -47,76 +47,4 @@ isUnique var state = state >>= \ids ->
                 , " are both assigned to the same variable id: "
                 , show (Var.varId var) ++ "." ]
  
-variables :: Analyzed.Expr ann -> [Var.Analyzed]
-variables (A _ expr) = case expr of
-    E.Literal _ -> 
-        [] 
-    
-    E.Var var -> 
-        [var]
-    
-    E.Range lowExpr highExpr -> 
-        variables lowExpr ++ variables highExpr
-    
-    E.ExplicitList exprs -> 
-        concatMap variables  exprs
-    
-    E.Binop binOpVar leftArgExpr rightArgExpr -> 
-        binOpVar : (variables leftArgExpr ++ variables rightArgExpr)
-    
-    E.Lambda pat expr' -> 
-        variablesInPat pat ++ variables expr'
-    
-    E.App appExpr argExpr -> 
-        variables appExpr ++ variables argExpr
-    
-    E.MultiIf ifExprs -> 
-        let variablesInIfExpr (ifExpr, thenExpr) = 
-                variables ifExpr ++ variables thenExpr
-        in concatMap variablesInIfExpr ifExprs
-    
-    E.Let defs bodyExpr ->
-        concatMap variablesInDef defs ++ variables bodyExpr
-    
-    E.Case targetExpr cases ->
-        let variablesInCase (casePat, caseExpr) = 
-                variablesInPat casePat ++ variables caseExpr
-        in variables targetExpr ++ concatMap variablesInCase cases
-    
-    E.Data _ exprs ->
-        concatMap variables exprs        
-    
-    E.Access recordExpr _ -> 
-        variables recordExpr
 
-    E.Remove recordExpr _ -> 
-        variables recordExpr    
-
-    E.Insert recordExpr _ insertExpr -> 
-        variables recordExpr ++ variables insertExpr    
-
-    E.Modify recordExpr modifications -> 
-        variables recordExpr ++ concatMap (variables . snd) modifications    
-
-    E.Record record -> 
-        concatMap (variables . snd) record   
- 
-    E.Port portImpl -> case portImpl of
-        E.In _ _ -> []
-        E.Out _ outExpr _ -> variables outExpr
-        E.Task _ taskExpr _ -> variables taskExpr   
-
-    E.GLShader _ _ _ -> 
-        []
-
-variablesInDef :: Analyzed.Def ann -> [Var.Analyzed]
-variablesInDef (Analyzed.Definition pat expr _) = 
-    variablesInPat pat ++ variables expr  
-
-variablesInPat :: Pat.AnalyzedPattern ann -> [Var.Analyzed]
-variablesInPat (A _ pat) = case pat of
-    Pat.Data var pats -> var : (concatMap variablesInPat pats)
-    
-    Pat.Alias _ aliasPat -> variablesInPat aliasPat
-
-    _ -> [] 
