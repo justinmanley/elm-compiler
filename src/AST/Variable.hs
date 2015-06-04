@@ -30,11 +30,14 @@ data Canonical = Canonical
     }
     deriving (Eq, Ord, Show)
 
+type VarId = Int
+
 data Analyzed = Analyzed 
     { canonicalName :: Canonical
-    , varId :: Int
+    , varId :: VarId
     } 
     deriving (Eq, Ord, Show) 
+
 
 local :: String -> Canonical
 local x = Canonical Local x

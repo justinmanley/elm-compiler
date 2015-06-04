@@ -3,7 +3,9 @@
 module Optimize.Variable where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Arrow (second)
 import Control.Monad.State (State, evalState, modify, get)
+import Data.Foldable (foldrM)
 import qualified Data.Map as Map
 
 import qualified AST.Expression.Analyzed as Analyzed
@@ -17,12 +19,17 @@ import qualified Reporting.Region as R
 
 type Scope = Map.Map Var.Canonical Var.Analyzed
 
+baseScope :: Scope
+baseScope = 
+    let saveEnvVar = Var.builtin E.saveEnvName   
+    in Map.fromList [(saveEnvVar, Var.Analyzed saveEnvVar 0)] 
+
 uniquify :: Module.CanonicalModule -> Module.AnalyzedModule R.Region
 uniquify modul = case modul of
     Module.Module { body, .. } -> case body of
         Module.ModuleBody { program, .. } -> modul { 
             Module.body = body { 
-                Module.program = evalState (uniquifyExpr Map.empty program) 0 
+                Module.program = evalState (uniquifyExpr baseScope program) 0 
             } 
         }
 
@@ -49,8 +56,11 @@ uniquifyExpr scope (A region expr) = fmap (A region) $ case expr of
             <*> uniquifyExpr scope leftArgExpr
             <*> uniquifyExpr scope rightArgExpr
 
-    E.Lambda pat bodyExpr -> 
-        E.Lambda <$> uniquifyPat scope pat <*> uniquifyExpr scope bodyExpr
+    E.Lambda pat bodyExpr -> do
+        (scope', uniquedPat) <- uniquifyPat scope pat 
+        
+        E.Lambda uniquedPat 
+            <$> uniquifyExpr scope' bodyExpr
 
     E.App appExpr argExpr -> do 
         E.App 
@@ -63,14 +73,16 @@ uniquifyExpr scope (A region expr) = fmap (A region) $ case expr of
                 (,) <$> uniquifyExpr scope ifExpr <*> uniquifyExpr scope thenExpr
         in E.MultiIf <$> mapM uniquifyIfExpr ifExprs
         
-    E.Let defs bodyExpr -> 
-        E.Let 
-            <$> mapM (uniquifyDef scope) defs 
-            <*> uniquifyExpr scope bodyExpr        
+    E.Let defs bodyExpr -> do
+        (scope', uniquedDefs) <- uniquifyDefs scope defs
+        
+        E.Let uniquedDefs
+            <$> uniquifyExpr scope' bodyExpr        
 
     E.Case targetExpr cases -> 
-        let uniquifyCase (casePat, caseExpr) = 
-                (,) <$> uniquifyPat scope casePat <*> uniquifyExpr scope caseExpr
+        let uniquifyCase (casePat, caseExpr) = do
+                (scope', uniquedCasePat) <- uniquifyPat scope casePat  
+                (,) uniquedCasePat <$> uniquifyExpr scope' caseExpr
         in E.Case <$> uniquifyExpr scope targetExpr <*> mapM uniquifyCase cases    
 
     E.Data cons exprs -> 
@@ -111,24 +123,33 @@ uniquifyExpr scope (A region expr) = fmap (A region) $ case expr of
 
 uniquifyPat :: Scope
     -> Pat.CanonicalPattern 
-    -> State Int (Pat.AnalyzedPattern R.Region)
-uniquifyPat scope (A ann pat) = fmap (A ann) $ case pat of 
-    Pat.Data cons pats ->
-        Pat.Data 
-            <$> getVar scope cons
-            <*> mapM (uniquifyPat scope) pats
+    -> State Int (Scope, Pat.AnalyzedPattern R.Region)
+uniquifyPat scope (A ann pat) = fmap (second $ A ann) $ case pat of 
+    Pat.Data cons pats -> do
+        (patScopes, uniquifiedPats) <- unzip <$> mapM (uniquifyPat scope) pats
+        
+        (,) (foldr Map.union scope patScopes) 
+            <$> (Pat.Data 
+                <$> getVar scope cons 
+                <*> return uniquifiedPats)
 
-    Pat.Record fieldNames -> return $
-         Pat.Record fieldNames 
+    Pat.Record fieldNames -> do
+        (fieldNameScopes, fieldNameIds) <- unzip <$> mapM (freshVar scope) fieldNames
+        
+        return (foldr Map.union scope fieldNameScopes, Pat.Record fieldNameIds)
 
-    Pat.Alias alias aliasPat ->  
-        Pat.Alias alias  <$> (uniquifyPat scope aliasPat)
+    Pat.Alias alias aliasPat -> do
+        (scope', uniquedAlias) <- freshVar scope alias
+ 
+        second (Pat.Alias uniquedAlias)
+            <$> uniquifyPat scope' aliasPat
 
-    Pat.Var name -> return $ Pat.Var name 
+    Pat.Var var -> 
+        second Pat.Var <$> freshVar scope var
 
-    Pat.Literal lit -> return $ Pat.Literal lit
+    Pat.Literal lit -> return (scope, Pat.Literal lit)
 
-    Pat.Anything -> return Pat.Anything 
+    Pat.Anything -> return (scope, Pat.Anything) 
 
 uniquifyRecordField :: Scope 
     -> (String, Canonical.Expr) 
@@ -136,17 +157,43 @@ uniquifyRecordField :: Scope
 uniquifyRecordField scope (fieldName, expr) =
     (,) fieldName <$> uniquifyExpr scope expr
 
-uniquifyDef :: Scope
-    -> Canonical.Def
-    -> State Int (Analyzed.Def R.Region)
-uniquifyDef scope (Canonical.Definition pat expr maybeType) = 
-    Analyzed.Definition 
-        <$> uniquifyPat scope pat
-        <*> uniquifyExpr scope expr
-        <*> return maybeType  
+uniquifyDefs :: Scope
+    -> [Canonical.Def]
+    -> State Int (Scope, [Analyzed.Def R.Region])
+uniquifyDefs scope defs = 
+    let uniquifyDef :: Scope
+            -> Canonical.Def
+            -> State Int (Analyzed.Def R.Region)
+        uniquifyDef scope (Canonical.Definition pat expr maybeType) = do 
+            (scope', uniquedPat) <- uniquifyPat scope pat    
 
+            Analyzed.Definition uniquedPat
+                <$> uniquifyExpr scope' expr
+                <*> return maybeType  
+   
+        -- | Bring the let-bound names into scope.
+        collectNames :: Canonical.Def -> Scope -> State Int Scope 
+        collectNames (Canonical.Definition pat expr maybeType) scope =
+            fst <$> uniquifyPat scope pat 
+            
+    in do
+        defScope <- foldrM collectNames scope defs
+        (,) defScope <$> mapM (uniquifyDef defScope) defs
+
+freshVar :: Scope -> String -> State Int (Scope, Var.Analyzed)
+freshVar scope name = do
+    modify (+1)
+    
+    let canonicalVar = Var.local name
+        var = Var.Analyzed canonicalVar <$> get
+    
+    (,) <$> (Map.insert canonicalVar <$> var <*> return scope) <*> var
+    
 getVar :: Scope -> Var.Canonical -> State Int Var.Analyzed
 getVar scope canonicalVar = case Map.lookup canonicalVar scope of
-    Just var -> return var
-    Nothing -> modify (+1) >> (Var.Analyzed canonicalVar <$> get)
-          
+    Just var -> return var 
+    Nothing -> error . unlines $
+        [ "[Compiler error]: Variable " 
+        , Var.toString canonicalVar 
+        , " should be in scope, but is not." ]
+

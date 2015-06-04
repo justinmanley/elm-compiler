@@ -122,7 +122,7 @@ instance (P.Pretty def, P.Pretty var, Var.ToString var, Var.ToString local)
           P.pretty dealiaser needsParens literal
 
       Var x ->
-          trace (show x) (P.pretty dealiaser needsParens x)
+          trace (Var.toString x) (P.pretty dealiaser needsParens x)
 
       Range lowExpr highExpr ->
           P.brackets $

@@ -39,7 +39,7 @@ type CanonicalPattern =
 
 
 type AnalyzedPattern ann = 
-    Pattern ann Var.Analyzed
+    Pattern ann Var.Analyzed Var.Analyzed
 
 list :: R.Position -> [RawPattern] -> RawPattern
 list end patterns =
