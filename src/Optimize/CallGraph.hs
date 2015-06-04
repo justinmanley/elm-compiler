@@ -9,7 +9,6 @@ import Data.Graph.Inductive.PatriciaTree (Gr)
 import qualified AST.Expression.Analyzed as Analyzed
 import qualified AST.Variable as Var
 import qualified AST.Module as Module 
-import AST.Pattern (CanonicalPattern)
 import qualified AST.Pattern as Pattern
 import qualified AST.Expression.General as E
 import Reporting.Annotation ( Annotated(A) )
@@ -131,25 +130,25 @@ checkExpr var boundVariables (A _ expr) tailCalls = case expr of
     E.GLShader _ _ _                      -> 
         tailCalls
 
---checkCaseExpr :: Env.UniqueVar
---    -> [Var.Analyzed]
---    -> DependencyGraph
---    -> (CanonicalPattern, Analyzed.Expr ann)
---    -> State VarEnv (DependencyGraph)
+checkCaseExpr :: Var.Analyzed
+    -> [Var.Analyzed]
+    -> DependencyGraph
+    -> (Pattern.AnalyzedPattern ann, Analyzed.Expr ann)
+    -> DependencyGraph
 checkCaseExpr var boundVariables tailCalls (pat, expr) = 
     checkExpr var (bindPat pat boundVariables) expr tailCalls
     
---checkIfExpr :: Env.UniqueVar
---    -> [Var.Analyzed] 
---    -> DependencyGraph 
---    -> (Analyzed.Expr ann, Analyzed.Expr ann)
---    -> State VarEnv (DependencyGraph)
+checkIfExpr :: Var.Analyzed
+    -> [Var.Analyzed] 
+    -> DependencyGraph 
+    -> (Analyzed.Expr ann, Analyzed.Expr ann)
+    -> DependencyGraph
 checkIfExpr var boundVariables tailCalls (ifExpr, thenExpr) = 
     let ifCalls = checkExpr var boundVariables ifExpr tailCalls
         thenCalls = checkExpr var boundVariables thenExpr tailCalls
     in mergeWith doesNotOccur ifCalls thenCalls
 
---bindPat :: CanonicalPattern -> [Var.Analyzed] -> [Var.Analyzed]
+bindPat :: Pattern.AnalyzedPattern ann -> [Var.Analyzed] -> [Var.Analyzed]
 bindPat (A _ pat) boundVariables = case pat of
     Pattern.Data _ pats -> foldr bindPat boundVariables pats 
     Pattern.Record fieldNames -> fieldNames ++ boundVariables
@@ -157,12 +156,12 @@ bindPat (A _ pat) boundVariables = case pat of
     Pattern.Var var -> var : boundVariables
     _ -> boundVariables
 
---body :: LEdge Dependency -> DependencyGraph -> DependencyGraph
+body :: LEdge Dependency -> DependencyGraph -> DependencyGraph
 body (var1, var2, _) callGraph = updateEdge (var1, var2, Body) callGraph
 
 -- | Perform a biased merge of the labeled edge (var1, var2, dep) into callGraph
 --   so that the Body label will never be replaced by the Tail label.
---fixBody :: LEdge Dependency -> DependencyGraph -> DependencyGraph
+fixBody :: LEdge Dependency -> DependencyGraph -> DependencyGraph
 fixBody (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
     Nothing   -> updateEdge (var1, var2, dep) callGraph
     Just (_, _, previousDep) -> case previousDep of
@@ -171,7 +170,7 @@ fixBody (var1, var2, dep) callGraph = case edge (var1, var2) callGraph of
 
 -- | If the target edge appears in the graph, then change its label to Body.
 --   Otherwise, leave the dependency label unchanged.
---doesNotOccur :: LEdge Dependency -> DependencyGraph -> DependencyGraph
+doesNotOccur :: LEdge Dependency -> DependencyGraph -> DependencyGraph
 doesNotOccur (var1, var2, _) callGraph = case edge (var1, var2) callGraph of
     Nothing -> callGraph
     Just _  -> updateEdge (var1, var2, Body) callGraph 
@@ -180,7 +179,7 @@ doesNotOccur (var1, var2, _) callGraph = case edge (var1, var2) callGraph of
 --   Otherwise, return Nothing. 
 --   Assumes that there can only be one edge in each direction between any pair of edges.
 -- i.e. assumes that g is a simple digraph.
---edge :: (Node, Node) -> graph a b -> Maybe (LEdge b)
+edge :: (Node, Node) -> DependencyGraph -> Maybe (LEdge Dependency)
 edge (src, dest) gr = 
     if src `gelem` gr --somehow this is called on a src node which doesn't exist in the graph. Why?
     then case filter (\(_, n2, _) -> n2 == dest) $ Graph.out gr src of
@@ -195,7 +194,7 @@ mergeWith :: (LEdge Dependency -> DependencyGraph -> DependencyGraph)
 mergeWith mergeEdge gMajor gMinor = 
     foldr mergeEdge gMajor $ Graph.labEdges gMinor
 
---updateEdge :: LEdge b -> graph () b -> graph () b
+updateEdge :: LEdge Dependency -> DependencyGraph -> DependencyGraph
 updateEdge (n1, n2, label) g = let
         addNodeIfMissing node graph = 
             if not $ node `gelem` graph 
