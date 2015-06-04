@@ -5,25 +5,20 @@ module Optimize.CallGraph where
 import qualified Data.Graph.Inductive.Graph as Graph
 import Data.Graph.Inductive (Node, LEdge, gelem)
 import Data.Graph.Inductive.PatriciaTree (Gr)
-import Control.Monad.State
-import Control.Applicative ((<$>))
-import Data.Foldable (foldrM)
 
 import qualified AST.Expression.Analyzed as Analyzed
 import qualified AST.Variable as Var
 import qualified AST.Module as Module 
-import qualified AST.Pattern as Pattern
 import AST.Pattern (CanonicalPattern)
+import qualified AST.Pattern as Pattern
 import qualified AST.Expression.General as E
 import Reporting.Annotation ( Annotated(A) )
-import qualified Optimize.Environment as Env
 
 data Dependency
     = Body
     | Tail
     deriving (Show, Eq)
 
-type VarEnv = Env.Environment Var.Analyzed
 type DependencyGraph = Gr () Dependency
 
 callGraph :: Module.AnalyzedModule ann -> DependencyGraph

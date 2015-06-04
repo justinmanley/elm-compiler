@@ -171,7 +171,7 @@ uniquifyDefs scope defs =
    
         -- | Bring the let-bound names into scope.
         collectNames :: Canonical.Def -> Scope -> State Int Scope 
-        collectNames (Canonical.Definition pat expr maybeType) scope =
+        collectNames (Canonical.Definition pat _ _) scope =
             fst <$> uniquifyPat scope pat 
             
     in do

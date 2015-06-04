@@ -77,10 +77,8 @@ Library
         Generate.JavaScript.Variable,
         Generate.Substitute,
         Nitpick.TopLevelTypes,
-        Optimize.Analyze,
         Optimize.CallGraph,
-        Optimize.Environment,
-        Optimize.Info,
+        Optimize.TailCall,
         Optimize.Variable,
         Parse.Binop,
         Parse.Declaration,
@@ -193,7 +191,8 @@ Test-Suite compiler-tests
         Test.Property
         Test.Property.Arbitrary
         Test.Optimize.CallGraph
-        Test.Optimize.Variable
+        Test.Optimize.Variable,
+        Test.Optimize.TailCall,
         Test.Utils
         AST.Helpers
         AST.Literal

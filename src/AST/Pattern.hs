@@ -10,7 +10,6 @@ import qualified AST.Variable as Var
 import qualified Reporting.Annotation as A
 import qualified Reporting.PrettyPrint as P
 import qualified Reporting.Region as R
-import qualified Optimize.Info as Optimize
 
 type Pattern ann var local =
     A.Annotated ann (Pattern' ann var local)
