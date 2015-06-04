@@ -21,7 +21,7 @@ import Test.Arbitrary.Graph
 import Test.Arbitrary.CallGraph
 
 import Optimize.CallGraph
-import qualified Optimize.Environment as Env
+import Optimize.Variable (uniquify)
 import qualified Compile
 import qualified AST.Module as Module
 import Reporting.Error (Error)
@@ -33,13 +33,11 @@ import Reporting.PrettyPrint (pretty)
 
 type DependencyGr = SimpleGraph Gr () Dependency
 
-callGraphTests :: [Test]
-callGraphTests = 
-    [ buildTest $ testModule "Tree.elm" treeTest 
-    , buildTest $ testModule "TreeRecord.elm" treeTest
-    , buildTest $ testModule ("Soundness" </> "Id.elm") idTest
-    , buildTest envDefsTest
-    , buildTest envNestedDefsTest
+callGraphTests :: Test
+callGraphTests = testGroup "Call graph construction" $ 
+    [ buildTest $ testModule treeTest "Tree.elm" 
+    , buildTest $ testModule treeTest "TreeRecord.elm" 
+    , buildTest $ testModule idTest ("Soundness" </> "Id.elm") 
     , testProperty "mergeWith identity" mergeWithIdentity
     , testProperty "mergeWith body" mergeWithBody
     , testProperty "mergeWith doesNotOccur" mergeWithDoesNotOccur
@@ -47,32 +45,6 @@ callGraphTests =
     , testProperty "updateEdge adds at most one edge" updateEdgeTest
     , testProperty "fixBody" fixBodyTest
     ]
-
-envDefsTest :: IO Test
-envDefsTest = testModule "Defs.elm" $ \modul -> 
-    let env = execState (callGraph modul :: State VarEnv (DependencyGraph Gr)) Env.empty
-        variables = 
-            [ Var.Canonical { Var.home = Var.Local, Var.name = "a" }
-            , Var.Canonical { Var.home = Var.Local, Var.name = "b" }
-            , Var.Canonical { Var.home = Var.Local, Var.name = "c" } ]
-        hasVariables = (Map.keys . Env.inScope $ env) == variables
-        failMessage = unlines $ 
-            [ "environment should contain bindings of all top-level names."
-            , show . pretty Map.empty False . Module.program . Module.body $ modul
-            , show env ]
-    in assertBool failMessage hasVariables 
-
-envNestedDefsTest :: IO Test
-envNestedDefsTest = testModule ("Soundness" </> "Apply.elm") $ \modul -> 
-    let env = execState (callGraph modul :: State VarEnv (DependencyGraph Gr)) Env.empty
-        variables = 
-            [ Var.Canonical { Var.home = Var.Local, Var.name = "apply" }
-            , Var.Canonical { Var.home = Var.Local, Var.name = "g" } ]
-        hasVariables = (Map.keys . Env.inScope $ env) == variables
-        failMessage = unlines $
-            [ "environment should contain bindings of function names in nested scopes."
-            , show env ]
-    in assertBool failMessage hasVariables
 
 mergeWithIdentity :: DependencyGr -> DependencyGr -> Bool
 mergeWithIdentity (SimpleGraph g1) (SimpleGraph g2) = Graph.equal merged g1 where
@@ -117,16 +89,15 @@ updateEdgeTest ledge (SimpleGraph g) = inRange (size, size + 1) updatedSize wher
 
 treeTest :: Module.CanonicalModule -> Assertion
 treeTest modul = assertBool failMessage (hasLoop treeCallGraph) where
-    (treeCallGraph, env) = runState (callGraph modul) Env.empty :: (DependencyGraph Gr, VarEnv)
+    treeCallGraph = callGraph . uniquify $ modul
     failMessage = unlines $
         [ "recursive function should cause a loop in the call graph."
         , "final call graph: " ++ Graph.prettify treeCallGraph
-        , show . pretty Map.empty False . Module.program . Module.body $ modul
-        , "final env: " ++ show env ] 
+        , show . pretty Map.empty False . Module.program . Module.body $ modul ] 
 
 idTest :: Module.CanonicalModule -> Assertion
 idTest modul = assertBool failMessage (not . hasLoop $ idCallGraph) where
-    idCallGraph = evalState (callGraph modul) Env.empty :: DependencyGraph Gr
+    idCallGraph = callGraph . uniquify $ modul
     failMessage = unlines $
         [ "non-recursive function should result in a call graph without loops." 
         , Graph.prettify idCallGraph ]

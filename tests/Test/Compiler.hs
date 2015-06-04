@@ -15,6 +15,8 @@ import qualified Elm.Compiler as Compiler
 import qualified Elm.Compiler.Module as Module
 
 import Test.Optimize.CallGraph (callGraphTests)
+import Test.Optimize.TailCall (tceTests)
+import Test.Optimize.Variable (uniquifyTests)
 
 compilerTests :: Test
 compilerTests =
@@ -25,7 +27,9 @@ compilerTests =
         testGroup "Compile Tests"
           [ testGroup "Good Tests" goods
           , testGroup "Bad Tests"  bads
-          , testGroup "CallGraph Tests" callGraphTests
+          , uniquifyTests
+          , tceTests
+          , callGraphTests
           ]
 
 

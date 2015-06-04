@@ -20,9 +20,7 @@ import qualified Reporting.Region as R
 type Scope = Map.Map Var.Canonical Var.Analyzed
 
 baseScope :: Scope
-baseScope = 
-    let saveEnvVar = Var.builtin E.saveEnvName   
-    in Map.fromList [(saveEnvVar, Var.Analyzed saveEnvVar 0)] 
+baseScope = Map.fromList [(Var.canonicalName Analyzed.saveEnvVar, Analyzed.saveEnvVar)] 
 
 uniquify :: Module.CanonicalModule -> Module.AnalyzedModule R.Region
 uniquify modul = case modul of

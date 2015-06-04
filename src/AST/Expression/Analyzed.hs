@@ -117,4 +117,7 @@ variablesInPat (A.A _ pat) = case pat of
     
     Pattern.Alias _ aliasPat -> variablesInPat aliasPat
 
-    _ -> [] 
+    _ -> []
+
+saveEnvVar :: Var.Analyzed
+saveEnvVar = Var.Analyzed (Var.builtin General.saveEnvName) 0
